@@ -20,6 +20,50 @@ export OPENAI_API_KEY="sk-..."
 research-agents "Map the current debates around retrieval-augmented generation evaluation."
 ```
 
+### Run against a local model on a Mac M2 with 16GB RAM
+
+The agents can connect to any OpenAI-compatible local server, including Ollama, LM Studio, or llama.cpp. For your Mac M2 with 16GB RAM, start with 3B-8B models for speed and stability; 12B models can work if you use a quantized build and close memory-heavy apps.
+
+Recommended local models to try:
+
+| Preset | Ollama model | Memory | Best for |
+| --- | --- | --- | --- |
+| `fast-small` | `llama3.2:3b` | Low | Fast planning, simple routing, and quick drafts. |
+| `balanced` | `qwen3:8b` | Medium | Best default balance for local agent reasoning on a 16GB M2 Mac. |
+| `balanced-alt` | `llama3.1:8b` | Medium | Strong general-purpose fallback with broad tool-calling compatibility. |
+| `coding` | `qwen2.5-coder:7b` | Medium | Code search, implementation notes, and developer research. |
+| `reasoning` | `deepseek-r1:7b` | Medium | Slower, but useful for step-by-step critique and hard trade-off analysis. |
+| `compact-reasoning` | `phi4-mini` | Low-medium | Efficient reasoning when you want lower memory pressure. |
+| `multimodal-small` | `gemma3:4b` | Low-medium | Lightweight general model if your local server exposes Gemma 3. |
+| `quality-large` | `gemma3:12b` | High | Higher-quality local synthesis; use quantized weights and close other apps. |
+| `mistral` | `mistral:7b` | Medium | Reliable instruction-following fallback for OpenAI-compatible local servers. |
+
+Example with Ollama:
+
+```bash
+ollama pull qwen3:8b
+ollama serve
+export RESEARCH_AGENTS_PROVIDER=ollama
+export RESEARCH_AGENTS_MODEL=balanced
+research-agents "Create a research plan for evaluating local LLM agents."
+```
+
+Example with LM Studio or llama.cpp:
+
+```bash
+export RESEARCH_AGENTS_PROVIDER=local
+export RESEARCH_AGENTS_BASE_URL="http://localhost:1234/v1"
+export RESEARCH_AGENTS_API_KEY="local"
+export RESEARCH_AGENTS_MODEL="qwen3:8b"
+research-agents "Create a source map for local LLM evaluation."
+```
+
+List all built-in local model presets from the CLI:
+
+```bash
+research-agents --list-local-models
+```
+
 To preview the workflow without calling the API:
 
 ```bash
@@ -47,7 +91,12 @@ Useful environment variables:
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `RESEARCH_AGENTS_MODEL` | `gpt-4.1` | Model used by the sample agents. |
+| `RESEARCH_AGENTS_MODEL` | `gpt-4.1` | Model used by the sample agents. Can be a local preset such as `balanced` when `RESEARCH_AGENTS_PROVIDER=ollama`. |
+| `RESEARCH_AGENTS_PROVIDER` | `openai` | Set to `ollama`, `local`, `lmstudio`, or `llama.cpp` to use an OpenAI-compatible local endpoint. |
+| `RESEARCH_AGENTS_BASE_URL` | `http://localhost:11434/v1` in local mode | Base URL for an OpenAI-compatible local model server. |
+| `RESEARCH_AGENTS_API_KEY` | `ollama` in local mode | API key placeholder or real key for the configured endpoint. |
+| `RESEARCH_AGENTS_USE_CHAT_COMPLETIONS` | unset | Force the Agents SDK to use the Chat Completions API shape for non-default endpoints. |
+| `RESEARCH_AGENTS_DISABLE_TRACING` | `1` in local mode | Disable hosted tracing export when running entirely locally. |
 | `RESEARCH_AGENTS_NOTES_DIR` | `research_notes` | Directory where the note-saving tool writes markdown files. |
 
 ## Suggested research workflow
