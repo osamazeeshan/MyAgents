@@ -1,0 +1,19 @@
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "my-research-agents"
+version = "0.1.0"
+description = "Starter OpenAI Agents SDK workflow for research work"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "openai-agents>=0.5.0",
+]
+
+[project.scripts]
+research-agents = "research_agents.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/research_agents"]
