@@ -21,9 +21,18 @@ export OPENAI_API_KEY="sk-..."
 research-agents "Map the current debates around retrieval-augmented generation evaluation."
 ```
 
+When run in an interactive terminal, the CLI now keeps the agent session open
+after the first answer so you can respond naturally if the model asks a follow-up
+question. Press Enter on an empty prompt, or type `q`, `quit`, or `exit`, to end
+the session. You can force the same behavior outside a TTY with `--interactive`:
+
+```bash
+research-agents --interactive "Map the current debates around retrieval-augmented generation evaluation."
+```
+
 ### Interactive top-conference literature review
 
-Run the conference-review workflow when you want an agent to search recent topics from venues such as NeurIPS, ICML, ICLR, AAAI, CVPR, ECCV, ICCV, and WACV. The topic-discovery step is limited to the current year and one year before it; on May 16, 2026, that means 2026 and 2025. The discovery output ends with one numbered topic-selection menu. When you enter a number, the CLI resolves it to the matching topic before searching the web and scholarly indexes. The focused paper search then returns no more than 20 recent and/or highly cited verified papers from roughly the last 5-6 years, and two LLM reviewer agents produce independent critical analyses, limitations, and possible future directions.
+Run the conference-review workflow when you want an agent to search recent topics from venues such as NeurIPS, ICML, ICLR, AAAI, CVPR, ECCV, ICCV, and WACV. The topic-discovery step is limited to the current year and one year before it; on May 16, 2026, that means 2026 and 2025. The discovery output ends with one numbered topic-selection menu. Before selecting, you can ask natural follow-up questions such as expanding a cluster or refining a section; the topic scout answers and returns you to selection. When you enter a number, the CLI resolves it to the matching topic before searching the web and scholarly indexes. The focused paper search then returns no more than 20 recent and/or highly cited verified papers from roughly the last 5-6 years, and two LLM reviewer agents produce independent critical analyses, limitations, and possible future directions.
 
 ```bash
 research-agents --conference-review "LLM agents, multimodal models, and computer vision"

@@ -4,11 +4,14 @@ from __future__ import annotations
 
 import asyncio
 import re
+from collections.abc import Callable
 from datetime import datetime, timezone
+from uuid import uuid4
 
 from agents import (
     Agent,
     Runner,
+    SQLiteSession,
     WebSearchTool,
     set_default_openai_api,
     set_default_openai_client,
@@ -132,6 +135,19 @@ QUERY_LINE_PATTERN = re.compile(
     re.IGNORECASE,
 )
 MAX_FOCUSED_PAPERS = 20
+EXIT_COMMANDS = {"", "q", "quit", "exit"}
+FOLLOW_UP_REQUEST_PATTERN = re.compile(
+    r"^\s*(?:"
+    r"can|could|would|will|please|refine|expand|explain|compare|contrast|"
+    r"summarize|list|show|tell|what|which|who|when|where|why|how"
+    r")\b|\?\s*$",
+    re.IGNORECASE,
+)
+FOLLOW_UP_INVITATION_PATTERN = re.compile(
+    r"(?:would you like|do you want|shall i|should i|want me to|"
+    r"ask me|tell me|select|choose|pick|refine|expand).{0,240}\?\s*$",
+    re.IGNORECASE | re.DOTALL,
+)
 
 
 def configure_model_provider(settings: ResearchAgentSettings) -> None:
@@ -376,11 +392,76 @@ def resolve_topic_selection(selection: str, discovery_context: str) -> str:
     return selection
 
 
+def looks_like_follow_up_request(user_text: str) -> bool:
+    """Return True when text is likely a conversational follow-up, not a topic."""
+
+    return bool(FOLLOW_UP_REQUEST_PATTERN.search(user_text.strip()))
+
+
+def output_invites_follow_up(output: str) -> bool:
+    """Return True when the model's final lines appear to ask for more input."""
+
+    return bool(FOLLOW_UP_INVITATION_PATTERN.search(output.strip()[-1000:]))
+
+
+async def answer_conference_topic_follow_up(
+    user_query: str, discovery_context: str
+) -> str:
+    """Answer a conversational follow-up during topic discovery."""
+
+    follow_up_prompt = f"""
+The user is in the conference-topic discovery step. Continue the conversation
+instead of starting paper search or review. Answer the user's relevant question
+directly, using the existing discovery context below as grounding. If the user
+asks to refine or expand topics, provide the requested refinement and then end
+with an updated numbered topic-selection menu when useful.
+
+Existing discovery context:
+{discovery_context}
+
+User follow-up:
+{user_query}
+""".strip()
+    result = await Runner.run(
+        build_conference_topic_scout(), follow_up_prompt, max_turns=12
+    )
+    return result.final_output
+
+
 async def run_research_workflow(prompt: str) -> str:
     """Run the research workflow and return the final agent output."""
 
     result = await Runner.run(build_research_orchestrator(), prompt)
     return result.final_output
+
+
+async def run_interactive_research_workflow(
+    prompt: str,
+    input_func: Callable[[str], str] = input,
+    output_func: Callable[[str], None] = print,
+) -> str:
+    """Run a persistent research-agent conversation in the terminal."""
+
+    agent = build_research_orchestrator()
+    session = SQLiteSession(f"research-agents-{uuid4().hex}")
+    outputs: list[str] = []
+
+    result = await Runner.run(agent, prompt, session=session)
+    outputs.append(result.final_output)
+    output_func(result.final_output)
+
+    while True:
+        follow_up = input_func(
+            "\nAsk a follow-up, or press Enter to exit: "
+        ).strip()
+        if follow_up.lower() in EXIT_COMMANDS:
+            break
+
+        result = await Runner.run(agent, follow_up, session=session)
+        outputs.append(result.final_output)
+        output_func(f"\n{result.final_output}")
+
+    return "\n\n".join(outputs)
 
 
 async def discover_recent_conference_topics(prompt: str = "") -> str:
@@ -498,12 +579,25 @@ async def run_interactive_conference_literature_review(prompt: str = "") -> str:
 
     topics = await discover_recent_conference_topics(prompt)
     print(topics)
-    selection = input(
-        "\nSelect a topic by number or paste a topic name: "
-    ).strip()
-    selected_topic = resolve_topic_selection(selection, topics)
-    if selected_topic != selection:
-        print(f"\nSelected topic {selection}: {selected_topic}")
+
+    while True:
+        selection = input(
+            "\nSelect a topic by number, paste a topic name, "
+            "or ask a follow-up question (Enter to exit): "
+        ).strip()
+        if selection.lower() in EXIT_COMMANDS:
+            return "Topic selection cancelled before paper search."
+
+        if selection.isdigit() or not looks_like_follow_up_request(selection):
+            selected_topic = resolve_topic_selection(selection, topics)
+            if selected_topic != selection:
+                print(f"\nSelected topic {selection}: {selected_topic}")
+            break
+
+        follow_up_answer = await answer_conference_topic_follow_up(selection, topics)
+        topics = f"{topics}\n\n# Follow-up: {selection}\n\n{follow_up_answer}"
+        print("\n# Topic Scout Follow-up\n")
+        print(follow_up_answer)
 
     paper_context = await search_papers_for_topic(selected_topic, topics)
     print("\n# Focused Paper Search\n")
