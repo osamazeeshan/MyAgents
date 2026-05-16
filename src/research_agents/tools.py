@@ -311,6 +311,10 @@ def search_verified_recent_papers_markdown(
     topic = topic.strip()
     if not topic:
         raise ValueError("topic must not be empty")
+    if topic.isdigit():
+        raise ValueError(
+            "topic must be resolved before searching; got only a numeric menu selection"
+        )
     if start_year > end_year:
         raise ValueError("start_year must be <= end_year")
     max_results = min(max(max_results, 1), _MAX_VERIFIED_PAPER_RESULTS)
