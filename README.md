@@ -9,6 +9,7 @@ A small Python starter kit for building OpenAI-powered agents for research work.
 - **Critical Reviewer**: challenges assumptions, flags weak evidence, and suggests follow-up checks.
 - **Research Orchestrator**: routes your request to the right specialist agent.
 - **Local notes tool**: saves structured notes to `research_notes/` so your work is not trapped in chat history.
+- **Conference literature-review workflow**: searches recent top AI/ML/CV venues, asks you to select a topic, verifies recent papers through scholarly indexes, and sends the grounded paper set to two independent reviewer agents for critical literature review.
 
 ## Quick start
 
@@ -19,6 +20,16 @@ pip install -e .
 export OPENAI_API_KEY="sk-..."
 research-agents "Map the current debates around retrieval-augmented generation evaluation."
 ```
+
+### Interactive top-conference literature review
+
+Run the conference-review workflow when you want an agent to search recent topics from venues such as NeurIPS, ICML, ICLR, AAAI, CVPR, ECCV, ICCV, and WACV. The topic-discovery step is limited to the current year and one year before it; on May 16, 2026, that means 2026 and 2025. After you select a numbered topic, the workflow queries Semantic Scholar, OpenAlex, Crossref, and arXiv for papers from roughly the last 5-6 years, prints the verified paper list with URLs/DOIs/arXiv IDs, and then asks two LLM reviewer agents to produce complete analysis, critical analysis, limitations, and future directions.
+
+```bash
+research-agents --conference-review "LLM agents, multimodal models, and computer vision"
+```
+
+For automatic topic discovery web search, use the default OpenAI Responses API configuration. Focused paper search is grounded by external scholarly index records, and the reviewer prompts forbid adding citations that are not present in the verified list. If scholarly index APIs are unreachable in your environment, the workflow will say so instead of fabricating papers.
 
 ### Run against a local model on a Mac M2 with 16GB RAM
 
@@ -83,7 +94,7 @@ research_notes/ # Created at runtime when notes are saved
 
 ## Customizing the agents
 
-1. Edit `src/research_agents/workflow.py` to change agent instructions, models, or handoffs.
+1. Edit `src/research_agents/workflow.py` to change agent instructions, models, handoffs, or the conference-review workflow.
 2. Add safe local tools in `src/research_agents/tools.py` with `@function_tool`.
 3. Keep research outputs in `research_notes/` or point `RESEARCH_AGENTS_NOTES_DIR` to another folder.
 
