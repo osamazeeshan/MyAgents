@@ -19,8 +19,8 @@ Conference literature-review workflow preview (--conference-review):
 1. Conference Topic Scout searches recent top AI/ML/CV venues from the current year
    and one year prior.
 2. The CLI prints a numbered topic menu and prompts you to select a topic.
-3. The same scout searches papers in the selected area from roughly the last 5-6 years.
-4. Two reviewer agents independently produce methodology and field-synthesis literature reviews.
+3. The workflow verifies papers through scholarly indexes for roughly the last 5-6 years.
+4. Two reviewer agents independently produce analysis, limitations, and future directions.
 """
 
 

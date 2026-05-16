@@ -9,7 +9,7 @@ A small Python starter kit for building OpenAI-powered agents for research work.
 - **Critical Reviewer**: challenges assumptions, flags weak evidence, and suggests follow-up checks.
 - **Research Orchestrator**: routes your request to the right specialist agent.
 - **Local notes tool**: saves structured notes to `research_notes/` so your work is not trapped in chat history.
-- **Conference literature-review workflow**: searches recent top AI/ML/CV venues, asks you to select a topic, searches recent papers for that topic, and sends the result to two independent reviewer agents for critical literature review.
+- **Conference literature-review workflow**: searches recent top AI/ML/CV venues, asks you to select a topic, verifies recent papers through scholarly indexes, and sends the grounded paper set to two independent reviewer agents for critical literature review.
 
 ## Quick start
 
@@ -29,7 +29,7 @@ Run the conference-review workflow when you want an agent to search recent topic
 research-agents --conference-review "LLM agents, multimodal models, and computer vision"
 ```
 
-For automatic internet search, use the default OpenAI Responses API configuration. If you run against a local or chat-completions-only endpoint, the workflow will still produce reusable search queries, but hosted web search is not available from those providers.
+For automatic topic discovery web search, use the default OpenAI Responses API configuration. Focused paper search is grounded by external scholarly index records, and the reviewer prompts forbid adding citations that are not present in the verified list. If scholarly index APIs are unreachable in your environment, the workflow will say so instead of fabricating papers.
 
 ### Run against a local model on a Mac M2 with 16GB RAM
 

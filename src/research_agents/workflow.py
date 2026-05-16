@@ -16,7 +16,12 @@ from agents import (
 from openai import AsyncOpenAI
 
 from .config import ResearchAgentSettings, load_settings
-from .tools import build_literature_search_query, save_research_note
+from .tools import (
+    build_literature_search_query,
+    save_research_note,
+    search_verified_recent_papers,
+    search_verified_recent_papers_markdown,
+)
 
 PLANNER_INSTRUCTIONS = """
 You are a research planner. Turn broad research goals into a practical plan.
@@ -72,36 +77,45 @@ Rules:
 """
 
 PAPER_SCOUT_INSTRUCTIONS = """
-You are the same conference topic scout, now doing a focused paper search for
-the topic selected by the user. Use web search to find relevant papers in this
-area.
+You are a grounded paper-search and bibliography agent for the topic selected by
+user. You are given verified paper records from external scholarly indexes.
 
-Rules:
-- Papers must generally be from the last 5-6 years relative to the supplied
-  current date. Include older papers only in a short "foundational exceptions"
-  section when they are essential context.
-- Prefer papers from top peer-reviewed venues and reputable preprint servers
-  when the preprint is influential or tied to a top venue.
-- Include title, authors when available, venue/source, year, URL or DOI, and a
-  one-sentence reason the paper is relevant.
-- Group papers by subtheme, method, benchmark/dataset, and application area.
-- Clearly separate verified papers from search leads that still need checking.
+Non-negotiable citation rules:
+- Do not add any paper that is not present in the verified paper records unless
+  you first verify it with an available search tool and include its returned URL,
+  DOI, or arXiv ID.
+- Never invent paper titles, authors, venues, URLs, DOIs, or arXiv IDs.
+- If the verified records are sparse, say so and propose search strings instead
+  of fabricating missing literature.
+- Keep papers within the requested 5-6 year window unless an older work is
+  explicitly marked as a foundational exception.
+
+Output rules:
+- First show the full verified paper list, preserving every URL/DOI/arXiv ID.
+- Then group papers by subtheme, method, benchmark/dataset, and application.
+- For each paper, add a short relevance note grounded in its title, venue, year,
+  and abstract snippet when present.
+- End with coverage gaps and additional exact search queries to verify manually.
 """
 
 METHODOLOGY_REVIEWER_INSTRUCTIONS = """
 You are Reviewer A, a rigorous methodology and evidence-quality reviewer. Write
-an in-depth critical literature review of the provided papers. Focus on study
-design, baselines, datasets, evaluation metrics, ablations, reproducibility,
-statistical validity, leakage/contamination risks, and whether claims are
-supported by evidence. Identify contradictions and gaps across papers.
+an in-depth critical literature review of the provided verified papers. Focus on
+study design, baselines, datasets, evaluation metrics, ablations,
+reproducibility, statistical validity, leakage/contamination risks, and whether
+claims are supported by evidence. Include complete analysis, critical analysis,
+limitations, and future directions. Do not cite or discuss papers absent from
+the verified paper list unless you clearly label them as follow-up search leads.
 """
 
 SYNTHESIS_REVIEWER_INSTRUCTIONS = """
 You are Reviewer B, a field-synthesis reviewer. Write an in-depth critical
-literature review of the provided papers. Focus on how the field has evolved,
-main research clusters, theoretical assumptions, practical limitations, open
-problems, promising directions, and how a new researcher should position a
-project in this area. Identify underexplored questions and risky hype.
+literature review of the provided verified papers. Focus on how the field has
+evolved, main research clusters, theoretical assumptions, practical limitations,
+open problems, promising directions, and how a new researcher should position a
+project in this area. Include complete analysis, critical analysis, limitations,
+and future directions. Do not cite or discuss papers absent from the verified
+paper list unless you clearly label them as follow-up search leads.
 """
 
 CONFERENCE_VENUES = (
@@ -141,7 +155,11 @@ def build_research_orchestrator() -> Agent:
 
     settings = load_settings()
     configure_model_provider(settings)
-    tools = [build_literature_search_query, save_research_note]
+    tools = [
+        build_literature_search_query,
+        save_research_note,
+        search_verified_recent_papers,
+    ]
 
     planner = Agent(
         name="Research Planner",
@@ -178,7 +196,11 @@ def build_conference_topic_scout() -> Agent:
 
     settings = load_settings()
     configure_model_provider(settings)
-    tools = [build_literature_search_query, save_research_note]
+    tools = [
+        build_literature_search_query,
+        save_research_note,
+        search_verified_recent_papers,
+    ]
     web_search = _build_web_search_tool(settings)
     if web_search is not None:
         tools.insert(0, web_search)
@@ -276,16 +298,26 @@ async def search_papers_for_topic(
     settings = load_settings()
     current_year, _ = _current_and_previous_year()
     earliest_year = current_year - 6
+    verified_papers = search_verified_recent_papers_markdown(
+        topic=selected_topic,
+        start_year=earliest_year,
+        end_year=current_year,
+        max_results=40,
+    )
     prompt = f"""
 Current date: {datetime.now(timezone.utc).date().isoformat()}.
 Selected topic: {selected_topic}
 Discovery context from the previous step:
 {discovery_context}
 
-Search for relevant papers on this selected topic. Keep papers within {earliest_year}-{current_year}
-where possible; use older foundational exceptions sparingly and label them.
+The following paper records were retrieved from external scholarly indexes.
+Use these as the authoritative source of truth. Do not add papers that are not
+in this verified list unless you verify them with the paper-search tool and
+include a returned URL, DOI, or arXiv ID.
 
-Return a structured bibliography grouped by subtheme, and include direct source links.
+{verified_papers}
+
+Return the full verified paper list first, then organize and annotate it.
 {_web_search_availability_note(settings)}
 """.strip()
     result = await Runner.run(
@@ -293,7 +325,12 @@ Return a structured bibliography grouped by subtheme, and include direct source 
         prompt,
         max_turns=20,
     )
-    return result.final_output
+    return (
+        f"{verified_papers}\n\n"
+        "---\n\n"
+        "# Paper Scout Organization\n\n"
+        f"{result.final_output}"
+    )
 
 
 async def review_selected_topic(selected_topic: str, paper_context: str) -> str:
@@ -304,8 +341,10 @@ Selected topic: {selected_topic}
 Recent paper set and notes:
 {paper_context}
 
-Write a critical, evidence-grounded literature review. Use only the supplied
-paper set unless explicitly marking an item as a suggested follow-up search.
+Write a critical, evidence-grounded literature review with explicit sections for
+complete analysis, critical analysis, limitations, and future directions. Use
+only the supplied verified paper set unless explicitly marking an item as a
+suggested follow-up search.
 """.strip()
 
     methodology_result, synthesis_result = await asyncio.gather(
