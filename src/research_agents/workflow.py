@@ -2,9 +2,16 @@
 
 from __future__ import annotations
 
-from agents import Agent, Runner
+from agents import (
+    Agent,
+    Runner,
+    set_default_openai_api,
+    set_default_openai_client,
+    set_tracing_disabled,
+)
+from openai import AsyncOpenAI
 
-from .config import load_settings
+from .config import ResearchAgentSettings, load_settings
 from .tools import build_literature_search_query, save_research_note
 
 PLANNER_INSTRUCTIONS = """
@@ -42,10 +49,29 @@ include instructions for what the user should ask next.
 """
 
 
+def configure_model_provider(settings: ResearchAgentSettings) -> None:
+    """Configure the Agents SDK for OpenAI or OpenAI-compatible local models."""
+
+    if settings.disable_tracing:
+        set_tracing_disabled(True)
+
+    if settings.use_chat_completions:
+        set_default_openai_api("chat_completions")
+
+    if settings.base_url:
+        set_default_openai_client(
+            AsyncOpenAI(
+                api_key=settings.api_key or "local",
+                base_url=settings.base_url,
+            )
+        )
+
+
 def build_research_orchestrator() -> Agent:
     """Build the research-agent handoff graph."""
 
     settings = load_settings()
+    configure_model_provider(settings)
     tools = [build_literature_search_query, save_research_note]
 
     planner = Agent(

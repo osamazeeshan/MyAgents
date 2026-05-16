@@ -9,6 +9,7 @@ description = "Starter OpenAI Agents SDK workflow for research work"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
+    "openai>=1.0.0",
     "openai-agents>=0.5.0",
 ]
 
