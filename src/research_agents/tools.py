@@ -20,6 +20,7 @@ from .config import load_settings
 _SAFE_SLUG_PATTERN = re.compile(r"[^a-zA-Z0-9._-]+")
 _HTTP_TIMEOUT_SECONDS = 20
 _USER_AGENT = "research-agents/0.1 (+https://github.com/openai/openai-agents-python)"
+_MAX_VERIFIED_PAPER_RESULTS = 20
 
 
 PaperRecord = dict[str, Any]
@@ -303,7 +304,7 @@ def search_verified_recent_papers_markdown(
     topic: str,
     start_year: int,
     end_year: int,
-    max_results: int = 30,
+    max_results: int = _MAX_VERIFIED_PAPER_RESULTS,
 ) -> str:
     """Search multiple scholarly indexes and return only traceable paper records."""
 
@@ -312,6 +313,7 @@ def search_verified_recent_papers_markdown(
         raise ValueError("topic must not be empty")
     if start_year > end_year:
         raise ValueError("start_year must be <= end_year")
+    max_results = min(max(max_results, 1), _MAX_VERIFIED_PAPER_RESULTS)
 
     errors: list[str] = []
     papers: list[PaperRecord] = []
@@ -339,6 +341,7 @@ def search_verified_recent_papers_markdown(
         f"# Verified paper search for: {topic}",
         "",
         f"Year window: {start_year}-{end_year}",
+        f"Result cap: {max_results} most relevant, recent, and/or highly cited papers.",
         "Search sources: Semantic Scholar Graph API, OpenAlex Works API, Crossref Works API, arXiv API.",
         "Verification rule: every listed paper must include a source URL, DOI, or arXiv ID returned by an external index.",
         "",
@@ -422,7 +425,7 @@ def search_verified_recent_papers(
     topic: str,
     start_year: int,
     end_year: int,
-    max_results: int = 30,
+    max_results: int = _MAX_VERIFIED_PAPER_RESULTS,
 ) -> str:
     """Search scholarly indexes and return only papers with external verification links."""
 
