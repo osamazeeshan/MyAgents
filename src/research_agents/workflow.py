@@ -124,7 +124,13 @@ CONFERENCE_VENUES = (
     "top-tier workshops or proceedings"
 )
 
-NUMBERED_TOPIC_PATTERN = re.compile(r"^\s*(\d{1,3})[.)]\s+(.+?)\s*$")
+NUMBERED_TOPIC_PATTERN = re.compile(
+    r"^\s*(?:[-*]\s*)?(?:\*\*)?(\d{1,3})[.)]\s+(.+?)(?:\*\*)?\s*$"
+)
+QUERY_LINE_PATTERN = re.compile(
+    r"^\s*(?:[-*]\s*)?\*?\*?Query\*?\*?\s*:\s*(.+?)\s*$",
+    re.IGNORECASE,
+)
 MAX_FOCUSED_PAPERS = 20
 
 
@@ -266,46 +272,70 @@ def _extract_numbered_topics(discovery_context: str) -> dict[int, str]:
 
     lines = discovery_context.splitlines()
 
-    # Prefer the explicit section title requested in the topic-scout prompt. This
-    # lets menu items include wrapped evidence lines or blank spacing without
-    # confusing earlier numbered prose with selectable topics.
+    # Prefer explicit menu/selection headings. Some model outputs use a numbered
+    # heading such as "3. Select a Topic..." followed by blank-line-separated
+    # menu entries, so blank lines alone cannot delimit menu blocks.
     for index, line in enumerate(lines):
-        if "topic selection menu" not in line.lower():
+        heading = line.lower()
+        if "topic selection menu" not in heading and "select a topic" not in heading:
             continue
-        menu: dict[int, str] = {}
-        for menu_line in lines[index + 1 :]:
-            if menu and menu_line.lstrip().startswith("#"):
-                break
-            match = NUMBERED_TOPIC_PATTERN.match(menu_line)
-            if match:
-                menu[int(match.group(1))] = _normalize_menu_topic(match.group(2))
+        menu = _extract_numbered_topic_block(lines[index + 1 :])
         if menu:
             return menu
 
-    blocks: list[dict[int, str]] = []
-    current_block: dict[int, str] = {}
-    for line in lines:
-        match = NUMBERED_TOPIC_PATTERN.match(line)
-        if match:
-            current_block[int(match.group(1))] = _normalize_menu_topic(match.group(2))
-            continue
-        if current_block and not line.strip():
-            blocks.append(current_block)
-            current_block = {}
-    if current_block:
-        blocks.append(current_block)
-
+    blocks = _extract_numbered_topic_blocks(lines)
     if not blocks:
         return {}
 
-    # The prompt asks for the selection menu at the end. Prefer the last sizeable
-    # numbered block, and fall back to the last numbered block if only one item was
-    # found. This avoids accidentally treating earlier explanatory numbering as the
-    # user-selectable menu.
-    for block in reversed(blocks):
-        if len(block) >= 2:
-            return block
-    return blocks[-1]
+    # The prompt asks for the selection menu at the end. Prefer the longest
+    # sequential numbered block, using the later block as a tie-breaker, so earlier
+    # numbered prose does not mask the actual user-selectable menu.
+    return max(enumerate(blocks), key=lambda item: (len(item[1]), item[0]))[1]
+
+
+def _extract_numbered_topic_block(lines: list[str]) -> dict[int, str]:
+    """Return the best topic block from the supplied lines."""
+
+    blocks = _extract_numbered_topic_blocks(lines)
+    if not blocks:
+        return {}
+    return max(enumerate(blocks), key=lambda item: (len(item[1]), item[0]))[1]
+
+
+def _extract_numbered_topic_blocks(lines: list[str]) -> list[dict[int, str]]:
+    """Collect sequential numbered topic blocks and adjacent Query lines."""
+
+    blocks: list[dict[int, str]] = []
+    current_block: dict[int, str] = {}
+    current_number: int | None = None
+
+    for line in lines:
+        if current_block and line.lstrip().startswith("#"):
+            blocks.append(current_block)
+            current_block = {}
+            current_number = None
+            continue
+
+        match = NUMBERED_TOPIC_PATTERN.match(line)
+        if match:
+            number = int(match.group(1))
+            if current_block and number <= max(current_block):
+                blocks.append(current_block)
+                current_block = {}
+            current_block[number] = _normalize_menu_topic(match.group(2))
+            current_number = number
+            continue
+
+        query_match = QUERY_LINE_PATTERN.match(line)
+        if query_match and current_number in current_block:
+            query = _normalize_query_text(query_match.group(1))
+            if query:
+                current_block[current_number] = query
+
+    if current_block:
+        blocks.append(current_block)
+
+    return blocks
 
 
 def _normalize_menu_topic(raw_topic: str) -> str:
@@ -314,7 +344,15 @@ def _normalize_menu_topic(raw_topic: str) -> str:
     topic = raw_topic.strip()
     topic = re.sub(r"\[([^\]]+)\]\([^\)]+\)", r"\1", topic)
     topic = topic.replace("**", "").replace("__", "").strip()
-    return topic
+    return topic.rstrip(" :")
+
+
+def _normalize_query_text(raw_query: str) -> str:
+    """Normalize a displayed search query from a topic menu."""
+
+    query = raw_query.strip().rstrip()
+    query = query.strip('"“”')
+    return query.strip()
 
 
 def resolve_topic_selection(selection: str, discovery_context: str) -> str:
@@ -377,6 +415,15 @@ async def search_papers_for_topic(
     selected_topic: str, discovery_context: str = ""
 ) -> str:
     """Use the topic scout to find recent papers for the selected topic."""
+
+    selected_topic = selected_topic.strip()
+    if selected_topic.isdigit():
+        if not discovery_context.strip():
+            raise ValueError(
+                "Numeric topic selections require the topic-discovery context. "
+                "Paste a topic name or rerun the interactive conference-review workflow."
+            )
+        selected_topic = resolve_topic_selection(selected_topic, discovery_context)
 
     settings = load_settings()
     current_year, _ = _current_and_previous_year()
