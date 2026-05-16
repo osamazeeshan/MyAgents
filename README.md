@@ -23,7 +23,7 @@ research-agents "Map the current debates around retrieval-augmented generation e
 
 ### Interactive top-conference literature review
 
-Run the conference-review workflow when you want an agent to search recent topics from venues such as NeurIPS, ICML, ICLR, AAAI, CVPR, ECCV, ICCV, and WACV. The topic-discovery step is limited to the current year and one year before it; on May 16, 2026, that means 2026 and 2025. After you select a numbered topic, the workflow queries Semantic Scholar, OpenAlex, Crossref, and arXiv for papers from roughly the last 5-6 years, prints the verified paper list with URLs/DOIs/arXiv IDs, and then asks two LLM reviewer agents to produce complete analysis, critical analysis, limitations, and future directions.
+Run the conference-review workflow when you want an agent to search recent topics from venues such as NeurIPS, ICML, ICLR, AAAI, CVPR, ECCV, ICCV, and WACV. The topic-discovery step is limited to the current year and one year before it; on May 16, 2026, that means 2026 and 2025. After you select a numbered topic, the same scout searches papers from roughly the last 5-6 years, then two LLM reviewer agents produce independent critical analyses.
 
 ```bash
 research-agents --conference-review "LLM agents, multimodal models, and computer vision"
