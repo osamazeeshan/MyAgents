@@ -6,7 +6,11 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from research_agents.tools import search_verified_recent_papers_markdown
-from research_agents.workflow import resolve_topic_selection
+from research_agents.workflow import (
+    looks_like_follow_up_request,
+    output_invites_follow_up,
+    resolve_topic_selection,
+)
 
 
 DISCOVERY_CONTEXT_WITH_QUERY_MENU = '''
@@ -47,3 +51,18 @@ def test_numeric_selection_reports_available_numbers() -> None:
 def test_verified_paper_search_rejects_unresolved_numeric_topic() -> None:
     with pytest.raises(ValueError, match="numeric menu selection"):
         search_verified_recent_papers_markdown("5", 2020, 2026)
+
+
+def test_follow_up_request_detection_for_refinement_prompts() -> None:
+    assert looks_like_follow_up_request("expand on vision-language models")
+    assert looks_like_follow_up_request("Can you compare federated learning clusters?")
+    assert not looks_like_follow_up_request("Vision-language pre-training agents")
+
+
+def test_output_follow_up_invitation_detection() -> None:
+    output = (
+        "Here are the clusters. Would you like to refine any section or "
+        "expand on specific clusters (e.g., federated learning, "
+        "vision-language models)?"
+    )
+    assert output_invites_follow_up(output)

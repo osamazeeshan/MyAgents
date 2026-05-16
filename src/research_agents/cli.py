@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import sys
 
 from .config import format_local_model_presets
 
@@ -19,9 +20,10 @@ Conference literature-review workflow preview (--conference-review):
 1. Conference Topic Scout searches recent top AI/ML/CV venues from the current year
    and one year prior.
 2. The CLI prints a single numbered topic menu and prompts you to select a topic.
-3. If you enter a menu number, the workflow resolves it to that topic before searching.
-4. The workflow verifies up to 20 recent/high-citation papers through scholarly indexes.
-5. Two reviewer agents independently produce analysis, limitations, and future directions.
+3. You can ask follow-up questions before selecting, such as refining or expanding clusters.
+4. If you enter a menu number, the workflow resolves it to that topic before searching.
+5. The workflow verifies up to 20 recent/high-citation papers through scholarly indexes.
+6. Two reviewer agents independently produce analysis, limitations, and future directions.
 """
 
 
@@ -37,6 +39,15 @@ def parse_args() -> argparse.Namespace:
         "--list-local-models",
         action="store_true",
         help="Print recommended local model presets for a 16GB Mac M2 and exit.",
+    )
+    parser.add_argument(
+        "--interactive",
+        "-i",
+        action="store_true",
+        help=(
+            "Keep a conversational session open after the first answer so you "
+            "can respond to agent follow-up questions."
+        ),
     )
     parser.add_argument(
         "--conference-review",
@@ -75,7 +86,11 @@ def main() -> None:
         print(output)
         return
 
-    from .workflow import run_research_workflow
+    from .workflow import run_interactive_research_workflow, run_research_workflow
+
+    if args.interactive or sys.stdin.isatty():
+        asyncio.run(run_interactive_research_workflow(args.prompt))
+        return
 
     output = asyncio.run(run_research_workflow(args.prompt))
     print(output)
