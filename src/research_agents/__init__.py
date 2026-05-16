@@ -2,7 +2,13 @@
 
 from importlib import import_module
 
-__all__ = ["build_research_orchestrator", "run_research_workflow"]
+__all__ = [
+    "build_research_orchestrator",
+    "discover_recent_conference_topics",
+    "run_interactive_conference_literature_review",
+    "run_research_workflow",
+    "search_papers_for_topic",
+]
 
 
 def __getattr__(name: str):
