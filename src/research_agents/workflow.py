@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import re
 from datetime import datetime, timezone
 
 from agents import (
@@ -122,6 +123,9 @@ CONFERENCE_VENUES = (
     "NeurIPS, ICML, ICLR, AAAI, CVPR, ECCV, ICCV, WACV, and closely related "
     "top-tier workshops or proceedings"
 )
+
+NUMBERED_TOPIC_PATTERN = re.compile(r"^\s*(\d{1,3})[.)]\s+(.+?)\s*$")
+MAX_FOCUSED_PAPERS = 20
 
 
 def configure_model_provider(settings: ResearchAgentSettings) -> None:
@@ -257,6 +261,83 @@ def _web_search_availability_note(settings: ResearchAgentSettings) -> str:
     return ""
 
 
+def _extract_numbered_topics(discovery_context: str) -> dict[int, str]:
+    """Extract the final numbered topic menu from a topic-discovery response."""
+
+    lines = discovery_context.splitlines()
+
+    # Prefer the explicit section title requested in the topic-scout prompt. This
+    # lets menu items include wrapped evidence lines or blank spacing without
+    # confusing earlier numbered prose with selectable topics.
+    for index, line in enumerate(lines):
+        if "topic selection menu" not in line.lower():
+            continue
+        menu: dict[int, str] = {}
+        for menu_line in lines[index + 1 :]:
+            if menu and menu_line.lstrip().startswith("#"):
+                break
+            match = NUMBERED_TOPIC_PATTERN.match(menu_line)
+            if match:
+                menu[int(match.group(1))] = _normalize_menu_topic(match.group(2))
+        if menu:
+            return menu
+
+    blocks: list[dict[int, str]] = []
+    current_block: dict[int, str] = {}
+    for line in lines:
+        match = NUMBERED_TOPIC_PATTERN.match(line)
+        if match:
+            current_block[int(match.group(1))] = _normalize_menu_topic(match.group(2))
+            continue
+        if current_block and not line.strip():
+            blocks.append(current_block)
+            current_block = {}
+    if current_block:
+        blocks.append(current_block)
+
+    if not blocks:
+        return {}
+
+    # The prompt asks for the selection menu at the end. Prefer the last sizeable
+    # numbered block, and fall back to the last numbered block if only one item was
+    # found. This avoids accidentally treating earlier explanatory numbering as the
+    # user-selectable menu.
+    for block in reversed(blocks):
+        if len(block) >= 2:
+            return block
+    return blocks[-1]
+
+
+def _normalize_menu_topic(raw_topic: str) -> str:
+    """Remove common Markdown adornments while preserving venue/year evidence."""
+
+    topic = raw_topic.strip()
+    topic = re.sub(r"\[([^\]]+)\]\([^\)]+\)", r"\1", topic)
+    topic = topic.replace("**", "").replace("__", "").strip()
+    return topic
+
+
+def resolve_topic_selection(selection: str, discovery_context: str) -> str:
+    """Resolve a numeric menu selection to the actual topic text."""
+
+    selection = selection.strip()
+    if not selection:
+        raise ValueError("A topic selection is required to continue.")
+
+    if selection.isdigit():
+        topics_by_number = _extract_numbered_topics(discovery_context)
+        selected_number = int(selection)
+        if selected_number not in topics_by_number:
+            available = ", ".join(str(number) for number in sorted(topics_by_number))
+            raise ValueError(
+                f"Topic number {selected_number} was not found in the selection menu"
+                + (f". Available numbers: {available}." if available else ".")
+            )
+        return topics_by_number[selected_number]
+
+    return selection
+
+
 async def run_research_workflow(prompt: str) -> str:
     """Run the research workflow and return the final agent output."""
 
@@ -279,9 +360,11 @@ Find research topics from {CONFERENCE_VENUES} for {previous_year} and {current_y
 User focus or constraints: {focus}
 
 Return:
-1. A short method note describing sources searched.
-2. A grouped list of all high-signal recent topics you found, with venue/year evidence.
-3. A numbered menu of topics for the user to select.
+- A short method note describing sources searched.
+- A grouped, unnumbered list of all high-signal recent topics you found, with venue/year evidence.
+- A final section titled "Topic selection menu". This must be the only numbered
+  list in the answer; number each selectable topic consecutively as 1., 2., 3.,
+  and so on.
 {_web_search_availability_note(settings)}
 """.strip()
     result = await Runner.run(
@@ -302,7 +385,7 @@ async def search_papers_for_topic(
         topic=selected_topic,
         start_year=earliest_year,
         end_year=current_year,
-        max_results=40,
+        max_results=MAX_FOCUSED_PAPERS,
     )
     prompt = f"""
 Current date: {datetime.now(timezone.utc).date().isoformat()}.
@@ -317,7 +400,9 @@ include a returned URL, DOI, or arXiv ID.
 
 {verified_papers}
 
-Return the full verified paper list first, then organize and annotate it.
+Return the full verified paper list first, then organize and annotate it. Keep
+the final bibliography to no more than {MAX_FOCUSED_PAPERS} papers, prioritizing
+the most relevant records with high citation counts and recent publication years.
 {_web_search_availability_note(settings)}
 """.strip()
     result = await Runner.run(
@@ -366,11 +451,12 @@ async def run_interactive_conference_literature_review(prompt: str = "") -> str:
 
     topics = await discover_recent_conference_topics(prompt)
     print(topics)
-    selected_topic = input(
+    selection = input(
         "\nSelect a topic by number or paste a topic name: "
     ).strip()
-    if not selected_topic:
-        raise ValueError("A topic selection is required to continue.")
+    selected_topic = resolve_topic_selection(selection, topics)
+    if selected_topic != selection:
+        print(f"\nSelected topic {selection}: {selected_topic}")
 
     paper_context = await search_papers_for_topic(selected_topic, topics)
     print("\n# Focused Paper Search\n")

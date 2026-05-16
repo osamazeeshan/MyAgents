@@ -18,9 +18,10 @@ PLAN_ONLY_TEXT = """Research-agent workflow preview:
 Conference literature-review workflow preview (--conference-review):
 1. Conference Topic Scout searches recent top AI/ML/CV venues from the current year
    and one year prior.
-2. The CLI prints a numbered topic menu and prompts you to select a topic.
-3. The workflow verifies papers through scholarly indexes for roughly the last 5-6 years.
-4. Two reviewer agents independently produce analysis, limitations, and future directions.
+2. The CLI prints a single numbered topic menu and prompts you to select a topic.
+3. If you enter a menu number, the workflow resolves it to that topic before searching.
+4. The workflow verifies up to 20 recent/high-citation papers through scholarly indexes.
+5. Two reviewer agents independently produce analysis, limitations, and future directions.
 """
 
 
