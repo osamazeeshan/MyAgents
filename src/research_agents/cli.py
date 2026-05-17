@@ -45,8 +45,8 @@ def parse_args() -> argparse.Namespace:
         "-i",
         action="store_true",
         help=(
-            "Keep a conversational session open after the first answer so you "
-            "can respond to agent follow-up questions."
+            "Keep a conversational session open after the first answer or "
+            "after a conference review so you can ask follow-up questions."
         ),
     )
     parser.add_argument(
@@ -80,10 +80,13 @@ def main() -> None:
         from .workflow import run_interactive_conference_literature_review
 
         output = asyncio.run(
-            run_interactive_conference_literature_review(args.prompt or "")
+            run_interactive_conference_literature_review(
+                args.prompt or "", keep_conversation_open=args.interactive
+            )
         )
-        print("\n# Two-Reviewer Critical Literature Review\n")
-        print(output)
+        if not args.interactive:
+            print("\n# Two-Reviewer Critical Literature Review\n")
+            print(output)
         return
 
     from .workflow import run_interactive_research_workflow, run_research_workflow
