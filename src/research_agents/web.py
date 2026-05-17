@@ -153,7 +153,10 @@ def build_home_page() -> str:
     .card {{ padding: 18px; min-height: 0; }}
     h2 {{ margin: 0; font-size: 16px; }}
     h3 {{ margin: 16px 0 10px; font-size: 15px; color: var(--accent); text-transform: uppercase; letter-spacing: .1em; }}
-    .memory-panel, .launchpad-panel {{ display: flex; flex-direction: column; overflow: hidden; }}
+    .memory-panel, .launchpad-panel {{ display: flex; flex-direction: column; }}
+    .memory-panel {{ overflow: visible; }}
+    .launchpad-panel {{ overflow: hidden; padding: 22px; gap: 14px; }}
+    .launchpad-panel h2 {{ padding: 2px 4px 4px; }}
     .panel-actions {{ display: grid; grid-template-columns: 1fr auto; gap: 8px; margin: 12px 0 10px; }}
     .section-heading {{ display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 2px 0 8px; }}
     .conversation-list {{ display: grid; align-content: start; gap: 8px; overflow-y: auto; overflow-x: hidden; flex: 1 1 420px; min-height: 180px; padding-right: 4px; }}
@@ -170,7 +173,7 @@ def build_home_page() -> str:
       color: var(--accent); background: rgba(124,247,212,.08); font-size: 13px; font-weight: 800; line-height: 1; cursor: help;
     }}
     .help-icon::after {{
-      content: attr(aria-label); position: absolute; z-index: 5; left: 50%; bottom: calc(100% + 9px); transform: translateX(-50%);
+      content: attr(aria-label); position: absolute; z-index: 20; left: 50%; top: calc(100% + 9px); transform: translateX(-50%);
       width: min(260px, 74vw); padding: 10px 12px; border: 1px solid var(--border); border-radius: 12px;
       color: var(--text); background: rgba(5,8,24,.96); box-shadow: 0 14px 40px rgba(0,0,0,.42);
       font-size: 12px; font-weight: 500; line-height: 1.35; text-align: left; opacity: 0; pointer-events: none; transition: opacity .15s ease;
@@ -186,6 +189,7 @@ def build_home_page() -> str:
     .suggestion span {{ color: var(--muted); margin: 6px 0; font-size: 13px; line-height: 1.35; }}
     .suggestion em {{ color: var(--accent); font-style: normal; font-size: 12px; }}
     .workspace {{ display: grid; grid-template-rows: minmax(0, 1fr) auto; gap: 14px; }}
+    .workspace.card {{ background: transparent; border-color: transparent; box-shadow: none; backdrop-filter: none; padding: 0; }}
     .output {{
       min-height: 0; overflow: auto; white-space: pre-wrap; line-height: 1.55; border: 1px solid var(--border);
       background: rgba(3, 6, 20, .72); border-radius: 22px; padding: 18px;

@@ -32,6 +32,10 @@ def test_home_page_contains_persistent_memory_layout() -> None:
     assert "setAgentRunning(false)" in html
     assert ".conversation-list { display: grid; align-content: start; gap: 8px; overflow-y: auto;" in html
     assert ".suggestions { display: grid; gap: 12px; overflow-y: auto;" in html
+    assert ".launchpad-panel { overflow: hidden; padding: 22px; gap: 14px; }" in html
+    assert ".help-icon::after" in html
+    assert "top: calc(100% + 9px)" in html
+    assert ".workspace.card { background: transparent; border-color: transparent; box-shadow: none; backdrop-filter: none; padding: 0; }" in html
     assert "Choose a model before running agents. Local presets use your configured OpenAI-compatible provider." in html
     assert 'id="provider"' not in html
     assert 'id="notes"' not in html
