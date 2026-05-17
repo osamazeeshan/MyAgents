@@ -23,6 +23,14 @@ def test_home_page_contains_persistent_memory_layout() -> None:
     assert ".suggestions { display: grid; gap: 12px; overflow-y: auto;" in html
 
 
+def test_home_page_script_escapes_newline_sequences_for_browser_parsing() -> None:
+    html = build_home_page()
+
+    assert r"+ ']\n' + m.text" in html
+    assert r".join('\n\n')" in html
+    assert r"+ '\n\nAgent is thinking…'" in html
+
+
 def test_memory_augmented_prompt_includes_memory_and_latest_request() -> None:
     prompt = format_memory_augmented_prompt("What should I read next?", "User: Topic A\nAgent: Read Paper B")
 
