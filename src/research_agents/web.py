@@ -142,30 +142,40 @@ def build_home_page() -> str:
     }}
     h1 {{ font-size: clamp(22px, 2.2vw, 30px); line-height: 1; margin: 0 0 6px; letter-spacing: -.04em; }}
     .tagline {{ color: var(--muted); font-size: 12px; line-height: 1.35; margin: 0; }}
-    .status {{ display: grid; grid-template-columns: 1fr; gap: 8px; margin-top: 14px; flex: 0 0 auto; }}
-    .pill {{ display: grid; gap: 2px; color: var(--muted); border: 1px solid var(--border); border-radius: 14px; padding: 8px 10px; min-width: 0; }}
-    .pill b {{ color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }}
-    .status .hint {{ line-height: 1.25; }}
-    .model-select {{ display: grid; gap: 6px; }}
-    .model-select label {{ color: var(--muted); font-size: 13px; }}
-    select {{ width: 100%; border: 1px solid var(--border); background: rgba(5,8,24,.86); color: var(--text); border-radius: 14px; padding: 10px 12px; outline: none; }}
+    .status {{ display: grid; gap: 8px; margin-top: 12px; flex: 0 0 auto; }}
+    .model-select {{ display: grid; gap: 6px; border-top: 1px solid var(--border); padding-top: 12px; }}
+    .model-select label {{ color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .08em; }}
+    .active-model {{ color: var(--muted); font-size: 12px; line-height: 1.25; }}
+    .active-model b {{ color: var(--text); font-weight: 700; }}
+    select {{ width: 100%; border: 1px solid var(--border); background: rgba(5,8,24,.86); color: var(--text); border-radius: 12px; padding: 8px 10px; outline: none; font-size: 13px; }}
     select:focus {{ border-color: var(--accent); box-shadow: 0 0 0 4px rgba(124,247,212,.12); }}
     main {{ flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: 300px minmax(0, 1fr) 330px; gap: 18px; }}
     .card {{ padding: 18px; min-height: 0; }}
-    h2 {{ margin: 0 0 12px; font-size: 20px; }}
+    h2 {{ margin: 0; font-size: 16px; }}
     h3 {{ margin: 16px 0 10px; font-size: 15px; color: var(--accent); text-transform: uppercase; letter-spacing: .1em; }}
     .memory-panel, .launchpad-panel {{ display: flex; flex-direction: column; overflow: hidden; }}
-    .panel-actions {{ display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; }}
-    .conversation-list {{ display: grid; gap: 10px; overflow-y: auto; overflow-x: hidden; flex: 1 1 auto; min-height: 0; padding-right: 4px; }}
+    .panel-actions {{ display: grid; grid-template-columns: 1fr auto; gap: 8px; margin: 12px 0 10px; }}
+    .section-heading {{ display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 2px 0 8px; }}
+    .conversation-list {{ display: grid; align-content: start; gap: 8px; overflow-y: auto; overflow-x: hidden; flex: 1 1 420px; min-height: 180px; padding-right: 4px; }}
     .conversation {{
-      width: 100%; max-width: 100%; aspect-ratio: 1 / 1; text-align: left; border: 1px solid var(--border); border-radius: 16px; padding: 12px;
+      width: 100%; max-width: 100%; min-height: 58px; text-align: left; border: 1px solid var(--border); border-radius: 14px; padding: 9px 10px;
       color: var(--text); background: rgba(255,255,255,.055); cursor: pointer; transition: .2s ease; overflow: hidden;
     }}
     .conversation.active {{ border-color: var(--accent); background: rgba(124,247,212,.12); }}
     .conversation strong, .conversation span {{ display: block; }}
     .conversation strong {{ white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }}
-    .conversation span {{ color: var(--muted); font-size: 12px; margin-top: 5px; overflow-wrap: anywhere; }}
-    .memory-summary {{ color: var(--muted); font-size: 13px; line-height: 1.45; border-top: 1px solid var(--border); margin-top: 14px; padding-top: 14px; }}
+    .conversation span {{ color: var(--muted); font-size: 11px; margin-top: 4px; overflow-wrap: anywhere; }}
+    .help-icon {{
+      position: relative; width: 24px; height: 24px; flex: 0 0 auto; border: 1px solid var(--border); border-radius: 999px;
+      color: var(--accent); background: rgba(124,247,212,.08); font-size: 13px; font-weight: 800; line-height: 1; cursor: help;
+    }}
+    .help-icon::after {{
+      content: attr(aria-label); position: absolute; z-index: 5; left: 50%; bottom: calc(100% + 9px); transform: translateX(-50%);
+      width: min(260px, 74vw); padding: 10px 12px; border: 1px solid var(--border); border-radius: 12px;
+      color: var(--text); background: rgba(5,8,24,.96); box-shadow: 0 14px 40px rgba(0,0,0,.42);
+      font-size: 12px; font-weight: 500; line-height: 1.35; text-align: left; opacity: 0; pointer-events: none; transition: opacity .15s ease;
+    }}
+    .help-icon:hover::after, .help-icon:focus-visible::after {{ opacity: 1; }}
     .suggestions {{ display: grid; gap: 12px; overflow-y: auto; overflow-x: hidden; flex: 1 1 auto; min-height: 0; padding-right: 4px; }}
     .suggestion {{
       text-align: left; border: 1px solid var(--border); border-radius: 18px; padding: 14px;
@@ -234,22 +244,24 @@ def build_home_page() -> str:
           <h1>{APP_NAME}</h1>
           <p class="tagline">{APP_TAGLINE}</p>
         </section>
-        <h2>Saved conversations</h2>
         <div class="panel-actions">
           <button class="secondary" id="newChat">New chat</button>
           <button class="secondary" id="deleteChat">Delete</button>
         </div>
-        <div class="conversation-list" id="conversationList"></div>
-        <div class="memory-summary" id="memorySummary">Memory is ready. Start a chat to save your prompts.</div>
+        <div class="section-heading">
+          <h2>Recent</h2>
+          <button class="help-icon" id="memorySummary" type="button" aria-label="Memory is ready. Start a chat to save your prompts.">?</button>
+        </div>
+        <div class="conversation-list" id="conversationList" aria-label="Recent history"></div>
         <aside class="status" id="status" aria-label="Runtime settings">
-          <div class="pill"><span>Provider</span><b id="provider">loading…</b></div>
           <div class="model-select">
-            <label for="modelChoice">Model</label>
+            <div class="section-heading">
+              <label for="modelChoice">Model</label>
+              <button class="help-icon" type="button" aria-label="Choose a model before running agents. Local presets use your configured OpenAI-compatible provider.">?</button>
+            </div>
             <select id="modelChoice">{model_options}</select>
+            <div class="active-model">Active: <b id="model">loading…</b></div>
           </div>
-          <div class="pill"><span>Active model</span><b id="model">loading…</b></div>
-          <div class="pill"><span>Notes</span><b id="notes">loading…</b></div>
-          <div class="hint">Choose a model before running agents. Local presets use your configured OpenAI-compatible provider.</div>
         </aside>
       </aside>
       <section class="card workspace">
@@ -339,7 +351,7 @@ def build_home_page() -> str:
     function updateMemorySummary() {{
       const chat = currentConversation();
       const prompts = chat.messages.filter(m => m.role === 'user').length;
-      $('memorySummary').textContent = prompts + ' user prompt' + (prompts === 1 ? '' : 's') + ' saved in this chat. New requests include recent memory so the agent can continue where you left off.';
+      $('memorySummary').setAttribute('aria-label', prompts + ' user prompt' + (prompts === 1 ? '' : 's') + ' saved in this chat. New requests include recent memory so the agent can continue where you left off.');
       $('memoryState').textContent = 'Memory on · ' + prompts + ' prompt' + (prompts === 1 ? '' : 's');
     }}
     function setOutput(text) {{ output.textContent = text || 'No output returned.'; output.scrollTop = output.scrollHeight; }}
@@ -408,7 +420,7 @@ def build_home_page() -> str:
     }});
     $('modelChoice').addEventListener('change', () => {{ $('model').textContent = $('modelChoice').selectedOptions[0].textContent.split(' · ').pop(); }});
     loadConversations();
-    fetch('/api/health').then(r => r.json()).then(data => {{ $('provider').textContent = data.provider; $('model').textContent = data.model; $('notes').textContent = data.notes_dir; }});
+    fetch('/api/health').then(r => r.json()).then(data => {{ $('model').textContent = data.model; }});
   </script>
 </body>
 </html>"""
