@@ -16,7 +16,8 @@ def test_home_page_contains_persistent_memory_layout() -> None:
     html = build_home_page()
 
     assert "ResearchAgent" in html
-    assert "Saved conversations" in html
+    assert "Recent" in html
+    assert "Saved conversations" not in html
     assert "Agent launchpads" in html
     assert 'id="modelChoice"' in html
     assert "model: selectedModel()" in html
@@ -29,8 +30,22 @@ def test_home_page_contains_persistent_memory_layout() -> None:
     assert "agent-running-logo" in html
     assert "setAgentRunning(true)" in html
     assert "setAgentRunning(false)" in html
-    assert ".conversation-list { display: grid; gap: 10px; overflow-y: auto;" in html
+    assert ".conversation-list { display: grid; align-content: start; gap: 8px; overflow-y: auto;" in html
     assert ".suggestions { display: grid; gap: 12px; overflow-y: auto;" in html
+    assert ".launchpad-panel { overflow: hidden; padding: 22px; gap: 14px; }" in html
+    assert ".help-icon::after" in html
+    assert "top: calc(100% + 9px)" in html
+    assert ".workspace.card { background: transparent; border-color: transparent; box-shadow: none; backdrop-filter: none; padding: 0; }" in html
+    assert ".modebar { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 7px; margin-bottom: 12px; }" in html
+    assert "font-size: 12px; line-height: 1.15; white-space: nowrap;" in html
+    assert ".actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: stretch; margin-top: 12px; }" in html
+    assert ".primary, .secondary, .memory-pill { min-height: 42px; border-radius: 16px; padding: 10px 12px; font-size: 13px; line-height: 1.15; font-weight: 800; display: inline-flex; align-items: center; justify-content: center; text-align: center; white-space: nowrap; }" in html
+    assert ".primary, .secondary { width: 112px; flex: 0 0 112px; cursor: pointer; }" in html
+    assert ".memory-pill { color: var(--accent); border: 1px solid rgba(124,247,212,.4); margin-left: auto; min-width: 170px; }" in html
+    assert ".agent-running.visible { display: inline-flex; flex-basis: 100%; justify-content: center; }" in html
+    assert "Choose a model before running agents. Local presets use your configured OpenAI-compatible provider." in html
+    assert 'id="provider"' not in html
+    assert 'id="notes"' not in html
 
 
 def test_home_page_script_escapes_newline_sequences_for_browser_parsing() -> None:
