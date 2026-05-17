@@ -122,6 +122,16 @@ and future directions. Do not cite or discuss papers absent from the verified
 paper list unless you clearly label them as follow-up search leads.
 """
 
+CONFERENCE_REVIEW_FOLLOW_UP_INSTRUCTIONS = """
+You are a conference literature-review follow-up assistant. The user has just
+completed a two-reviewer conference literature review with verified paper
+records. Answer follow-up questions conversationally while staying grounded in
+the supplied selected topic, paper context, and review context. Do not invent
+new citations. If the user asks for more literature, clearly label suggestions
+as follow-up search leads unless they are present in the supplied verified
+paper set.
+"""
+
 CONFERENCE_VENUES = (
     "NeurIPS, ICML, ICLR, AAAI, CVPR, ECCV, ICCV, WACV, and closely related "
     "top-tier workshops or proceedings"
@@ -263,6 +273,19 @@ def build_synthesis_reviewer() -> Agent:
     return Agent(
         name="Field Synthesis Reviewer",
         instructions=SYNTHESIS_REVIEWER_INSTRUCTIONS,
+        model=settings.model,
+        tools=[save_research_note],
+    )
+
+
+def build_conference_review_follow_up_agent() -> Agent:
+    """Build an agent for post-review conference-literature follow-ups."""
+
+    settings = load_settings()
+    configure_model_provider(settings)
+    return Agent(
+        name="Conference Review Follow-up Assistant",
+        instructions=CONFERENCE_REVIEW_FOLLOW_UP_INSTRUCTIONS,
         model=settings.model,
         tools=[save_research_note],
     )
@@ -428,6 +451,45 @@ User follow-up:
     return result.final_output
 
 
+def format_conference_review_follow_up_prompt(
+    question: str, selected_topic: str, paper_context: str, review_context: str
+) -> str:
+    """Build a grounded prompt for post-review follow-up questions."""
+
+    return f"""
+The user is asking a follow-up after an interactive conference literature
+review. Keep the conversation open and answer directly from the supplied
+context.
+
+Selected topic:
+{selected_topic}
+
+Verified paper search and organization context:
+{paper_context}
+
+Two-reviewer literature-review context:
+{review_context}
+
+User follow-up question:
+{question}
+""".strip()
+
+
+async def answer_conference_review_follow_up(
+    question: str, selected_topic: str, paper_context: str, review_context: str
+) -> str:
+    """Answer a user follow-up after the two-reviewer conference review."""
+
+    result = await Runner.run(
+        build_conference_review_follow_up_agent(),
+        format_conference_review_follow_up_prompt(
+            question, selected_topic, paper_context, review_context
+        ),
+        max_turns=12,
+    )
+    return result.final_output
+
+
 async def run_research_workflow(prompt: str) -> str:
     """Run the research workflow and return the final agent output."""
 
@@ -574,14 +636,20 @@ suggested follow-up search.
     )
 
 
-async def run_interactive_conference_literature_review(prompt: str = "") -> str:
-    """Run topic discovery, user selection, paper search, and two-agent review."""
+async def run_interactive_conference_literature_review(
+    prompt: str = "",
+    *,
+    keep_conversation_open: bool = False,
+    input_func: Callable[[str], str] = input,
+    output_func: Callable[[str], None] = print,
+) -> str:
+    """Run topic discovery, paper search, review, and optional follow-ups."""
 
     topics = await discover_recent_conference_topics(prompt)
-    print(topics)
+    output_func(topics)
 
     while True:
-        selection = input(
+        selection = input_func(
             "\nSelect a topic by number, paste a topic name, "
             "or ask a follow-up question (Enter to exit): "
         ).strip()
@@ -591,16 +659,37 @@ async def run_interactive_conference_literature_review(prompt: str = "") -> str:
         if selection.isdigit() or not looks_like_follow_up_request(selection):
             selected_topic = resolve_topic_selection(selection, topics)
             if selected_topic != selection:
-                print(f"\nSelected topic {selection}: {selected_topic}")
+                output_func(f"\nSelected topic {selection}: {selected_topic}")
             break
 
         follow_up_answer = await answer_conference_topic_follow_up(selection, topics)
         topics = f"{topics}\n\n# Follow-up: {selection}\n\n{follow_up_answer}"
-        print("\n# Topic Scout Follow-up\n")
-        print(follow_up_answer)
+        output_func("\n# Topic Scout Follow-up\n")
+        output_func(follow_up_answer)
 
     paper_context = await search_papers_for_topic(selected_topic, topics)
-    print("\n# Focused Paper Search\n")
-    print(paper_context)
+    output_func("\n# Focused Paper Search\n")
+    output_func(paper_context)
 
-    return await review_selected_topic(selected_topic, paper_context)
+    review = await review_selected_topic(selected_topic, paper_context)
+    if not keep_conversation_open:
+        return review
+
+    outputs = [review]
+    output_func("\n# Two-Reviewer Critical Literature Review\n")
+    output_func(review)
+
+    while True:
+        follow_up = input_func(
+            "\nAsk a follow-up about this literature review, or press Enter to exit: "
+        ).strip()
+        if follow_up.lower() in EXIT_COMMANDS:
+            break
+
+        follow_up_answer = await answer_conference_review_follow_up(
+            follow_up, selected_topic, paper_context, "\n\n".join(outputs)
+        )
+        outputs.append(f"# Follow-up: {follow_up}\n\n{follow_up_answer}")
+        output_func(f"\n{follow_up_answer}")
+
+    return "\n\n".join(outputs)

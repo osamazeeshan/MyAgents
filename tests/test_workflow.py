@@ -66,3 +66,61 @@ def test_output_follow_up_invitation_detection() -> None:
         "vision-language models)?"
     )
     assert output_invites_follow_up(output)
+
+
+def test_conference_review_follow_up_prompt_includes_review_context() -> None:
+    from research_agents.workflow import format_conference_review_follow_up_prompt
+
+    prompt = format_conference_review_follow_up_prompt(
+        "What should I read first?", "Topic A", "Paper context", "Review context"
+    )
+
+    assert "What should I read first?" in prompt
+    assert "Topic A" in prompt
+    assert "Paper context" in prompt
+    assert "Review context" in prompt
+
+
+def test_interactive_conference_review_stays_open_for_followups(monkeypatch) -> None:
+    import asyncio
+    import research_agents.workflow as workflow
+
+    async def fake_discover(prompt: str = "") -> str:
+        return "# Topic selection menu\n1. Topic A"
+
+    async def fake_search(selected_topic: str, discovery_context: str = "") -> str:
+        return f"papers for {selected_topic}"
+
+    async def fake_review(selected_topic: str, paper_context: str) -> str:
+        return f"review for {selected_topic} with {paper_context}"
+
+    async def fake_follow_up(
+        question: str, selected_topic: str, paper_context: str, review_context: str
+    ) -> str:
+        assert question == "What are the gaps?"
+        assert selected_topic == "Topic A"
+        assert paper_context == "papers for Topic A"
+        assert "review for Topic A" in review_context
+        return "follow-up answer"
+
+    monkeypatch.setattr(workflow, "discover_recent_conference_topics", fake_discover)
+    monkeypatch.setattr(workflow, "search_papers_for_topic", fake_search)
+    monkeypatch.setattr(workflow, "review_selected_topic", fake_review)
+    monkeypatch.setattr(workflow, "answer_conference_review_follow_up", fake_follow_up)
+
+    inputs = iter(["1", "What are the gaps?", ""])
+    outputs: list[str] = []
+
+    transcript = asyncio.run(
+        workflow.run_interactive_conference_literature_review(
+            "",
+            keep_conversation_open=True,
+            input_func=lambda prompt: next(inputs),
+            output_func=outputs.append,
+        )
+    )
+
+    assert "review for Topic A" in transcript
+    assert "# Follow-up: What are the gaps?" in transcript
+    assert "follow-up answer" in transcript
+    assert any("Two-Reviewer Critical Literature Review" in item for item in outputs)
