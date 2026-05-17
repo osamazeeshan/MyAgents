@@ -124,3 +124,121 @@ def test_interactive_conference_review_stays_open_for_followups(monkeypatch) -> 
     assert "# Follow-up: What are the gaps?" in transcript
     assert "follow-up answer" in transcript
     assert any("Two-Reviewer Critical Literature Review" in item for item in outputs)
+
+
+def test_follow_up_detection_for_paper_to_code_requests() -> None:
+    from research_agents.workflow import (
+        looks_like_artifact_request,
+        looks_like_paper_reading_request,
+        looks_like_reproduction_request,
+    )
+
+    assert looks_like_paper_reading_request("read the complete paper with me")
+    assert looks_like_artifact_request("find the code and dataset")
+    assert looks_like_reproduction_request("create a repo to implement this paper")
+
+
+def test_prepare_reproduction_repository_creates_scaffold(tmp_path, monkeypatch) -> None:
+    import research_agents.workflow as workflow
+
+    monkeypatch.setattr(workflow, "REPRODUCTION_REPOS_DIR", tmp_path)
+
+    result = workflow.prepare_reproduction_repository(
+        "My Paper Repo!", dataset_url="https://example.com/dataset"
+    )
+
+    repo_path = tmp_path / "My-Paper-Repo"
+    assert "Created a new clean-room scaffold repository" in result
+    assert (repo_path / "README.md").exists()
+    assert (repo_path / "src").is_dir()
+    assert (repo_path / "tests").is_dir()
+    assert (repo_path / "DATASET.md").read_text(encoding="utf-8").strip().endswith(
+        "https://example.com/dataset"
+    )
+
+
+def test_interactive_conference_review_supports_paper_to_repo_path(monkeypatch, tmp_path) -> None:
+    import asyncio
+    import research_agents.workflow as workflow
+
+    async def fake_discover(prompt: str = "") -> str:
+        return "# Topic selection menu\n1. Topic A"
+
+    async def fake_search(selected_topic: str, discovery_context: str = "") -> str:
+        return f"papers for {selected_topic}"
+
+    async def fake_review(selected_topic: str, paper_context: str) -> str:
+        return f"review for {selected_topic} with {paper_context}"
+
+    async def fake_read(
+        paper_request: str,
+        paper_source: str,
+        selected_topic: str,
+        paper_context: str,
+        review_context: str,
+    ) -> str:
+        assert paper_request == "Paper A"
+        assert paper_source == "https://example.com/paper.pdf"
+        return "reading notes"
+
+    async def fake_artifacts(
+        paper_request: str, selected_topic: str, paper_context: str, reading_context: str
+    ) -> str:
+        assert paper_request == "Paper A"
+        assert "reading notes" in reading_context
+        return "artifact notes"
+
+    async def fake_plan(
+        selected_topic: str,
+        paper_request: str,
+        paper_context: str,
+        reading_context: str,
+        artifact_context: str,
+        repo_result: str,
+    ) -> str:
+        assert paper_request == "Paper A"
+        assert "reading notes" in reading_context
+        assert "artifact notes" in artifact_context
+        assert "Local path" in repo_result
+        return "implementation plan"
+
+    monkeypatch.setattr(workflow, "REPRODUCTION_REPOS_DIR", tmp_path)
+    monkeypatch.setattr(workflow, "discover_recent_conference_topics", fake_discover)
+    monkeypatch.setattr(workflow, "search_papers_for_topic", fake_search)
+    monkeypatch.setattr(workflow, "review_selected_topic", fake_review)
+    monkeypatch.setattr(workflow, "read_selected_paper", fake_read)
+    monkeypatch.setattr(workflow, "scout_code_and_datasets", fake_artifacts)
+    monkeypatch.setattr(workflow, "plan_reproduction_repository", fake_plan)
+
+    inputs = iter(
+        [
+            "1",
+            "read paper",
+            "Paper A",
+            "https://example.com/paper.pdf",
+            "find code and dataset",
+            "Paper A",
+            "create repo to implement this paper",
+            "Paper A",
+            "",
+            "https://example.com/dataset",
+            "paper-a-repro",
+            "yes",
+            "",
+        ]
+    )
+    outputs: list[str] = []
+
+    transcript = asyncio.run(
+        workflow.run_interactive_conference_literature_review(
+            "",
+            keep_conversation_open=True,
+            input_func=lambda prompt: next(inputs),
+            output_func=outputs.append,
+        )
+    )
+
+    assert "# Paper reading for: Paper A" in transcript
+    assert "# Code/data scout for: Paper A" in transcript
+    assert "# Reproduction request: create repo to implement this paper" in transcript
+    assert (tmp_path / "paper-a-repro" / "README.md").exists()

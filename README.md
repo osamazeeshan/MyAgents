@@ -40,6 +40,18 @@ research-agents --conference-review "LLM agents, multimodal models, and computer
 
 For automatic topic discovery web search, use the default OpenAI Responses API configuration. Focused paper search is grounded by external scholarly index records, and the reviewer prompts forbid adding citations that are not present in the verified list. If scholarly index APIs are unreachable in your environment, the workflow will say so instead of fabricating papers.
 
+When `--interactive` is enabled, the post-review conversation now supports a
+paper-to-code follow-up path. Ask to `read paper` and the workflow asks which
+paper to inspect plus any PDF URL, paper URL, abstract, or text excerpt you want
+to provide for grounding. Ask to `find code/data` and a code-and-dataset scout
+looks for implementation repositories, project pages, model cards, and datasets.
+Ask to `create repo` and the workflow asks for the target paper, an optional
+existing code URL to clone, optional dataset notes, a local repo name, and a
+final confirmation before it creates anything under `reproduction_repos/`. If a
+code URL is supplied it runs `git clone`; otherwise it creates a clean-room
+scaffold and then asks the reproduction planner to propose the next confirmed
+implementation steps.
+
 ### Run against a local model on a Mac M2 with 16GB RAM
 
 The agents can connect to any OpenAI-compatible local server, including Ollama, LM Studio, or llama.cpp. For your Mac M2 with 16GB RAM, start with 3B-8B models for speed and stability; 12B models can work if you use a quantized build and close memory-heavy apps.

@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import asyncio
 import re
+import subprocess
 from collections.abc import Callable
 from datetime import datetime, timezone
+from pathlib import Path
 from uuid import uuid4
 
 from agents import (
@@ -129,7 +131,42 @@ records. Answer follow-up questions conversationally while staying grounded in
 the supplied selected topic, paper context, and review context. Do not invent
 new citations. If the user asks for more literature, clearly label suggestions
 as follow-up search leads unless they are present in the supplied verified
-paper set.
+paper set. When the user wants to read a complete paper, find code/datasets,
+or prepare a reproduction repository, explain that the interactive workflow can
+collect the required inputs step by step.
+"""
+
+PAPER_READING_INSTRUCTIONS = """
+You are a paper-reading assistant. Help the user deeply read one selected paper
+from a verified paper set. Work only from the paper details, URL/PDF/text, and
+review context supplied by the workflow. If the full paper text is unavailable,
+say exactly what is missing and ask the user to provide a PDF URL, abstract, or
+text excerpt. Produce a structured reading with: problem, contributions, method,
+math/algorithm details, experiments, datasets, results, limitations,
+reproducibility checklist, and questions to discuss with the user. Do not
+invent paper content not present in the supplied context.
+"""
+
+ARTIFACT_SCOUT_INSTRUCTIONS = """
+You are a code-and-dataset scout for research papers. Search for official and
+credible unofficial implementation repositories, project pages, model cards,
+datasets, benchmark leaderboards, data licenses, and setup instructions for the
+selected paper. Prefer official paper/project/GitHub/Hugging Face/Papers with
+Code/dataset-homepage links. Clearly separate verified artifacts from search
+leads and unknowns. End by asking the user which code URL, dataset URL, and
+local repository path should be used for reproduction.
+"""
+
+REPRODUCTION_PLANNER_INSTRUCTIONS = """
+You are a reproduction repository planner and implementation guide. Given the
+selected paper, paper-reading notes, code/dataset artifact notes, and the local
+repository preparation result, create an actionable implementation plan. If an
+existing codebase was cloned, explain the repo layout to inspect, environment
+setup, data download steps, smoke tests, and experiment commands. If a scaffold
+was created because no code was available, propose a minimal clean-room
+implementation structure, module responsibilities, pseudocode, tests, and an
+incremental coding checklist. Ask the user for confirmation before each next
+implementation step.
 """
 
 CONFERENCE_VENUES = (
@@ -145,6 +182,7 @@ QUERY_LINE_PATTERN = re.compile(
     re.IGNORECASE,
 )
 MAX_FOCUSED_PAPERS = 20
+REPRODUCTION_REPOS_DIR = Path("reproduction_repos")
 EXIT_COMMANDS = {"", "q", "quit", "exit"}
 FOLLOW_UP_REQUEST_PATTERN = re.compile(
     r"^\s*(?:"
@@ -157,6 +195,18 @@ FOLLOW_UP_INVITATION_PATTERN = re.compile(
     r"(?:would you like|do you want|shall i|should i|want me to|"
     r"ask me|tell me|select|choose|pick|refine|expand).{0,240}\?\s*$",
     re.IGNORECASE | re.DOTALL,
+)
+PAPER_READING_REQUEST_PATTERN = re.compile(
+    r"\b(?:read|deep dive|full paper|complete paper|walk through|discuss)\b",
+    re.IGNORECASE,
+)
+ARTIFACT_REQUEST_PATTERN = re.compile(
+    r"\b(?:code|repo|repository|github|dataset|data set|artifacts?|implementation)\b",
+    re.IGNORECASE,
+)
+REPRODUCTION_REQUEST_PATTERN = re.compile(
+    r"\b(?:create|clone|scaffold|implement|reproduce|reproduction)\b.*\b(?:repo|repository|code|paper)\b",
+    re.IGNORECASE,
 )
 
 
@@ -286,6 +336,49 @@ def build_conference_review_follow_up_agent() -> Agent:
     return Agent(
         name="Conference Review Follow-up Assistant",
         instructions=CONFERENCE_REVIEW_FOLLOW_UP_INSTRUCTIONS,
+        model=settings.model,
+        tools=[save_research_note],
+    )
+
+
+def build_paper_reading_agent() -> Agent:
+    """Build an agent for grounded full-paper reading and discussion."""
+
+    settings = load_settings()
+    configure_model_provider(settings)
+    return Agent(
+        name="Paper Reading Assistant",
+        instructions=PAPER_READING_INSTRUCTIONS,
+        model=settings.model,
+        tools=[save_research_note],
+    )
+
+
+def build_artifact_scout_agent() -> Agent:
+    """Build an agent that searches for implementation code and datasets."""
+
+    settings = load_settings()
+    configure_model_provider(settings)
+    tools = [save_research_note]
+    web_search = _build_web_search_tool(settings)
+    if web_search is not None:
+        tools.insert(0, web_search)
+    return Agent(
+        name="Code and Dataset Scout",
+        instructions=ARTIFACT_SCOUT_INSTRUCTIONS,
+        model=settings.model,
+        tools=tools,
+    )
+
+
+def build_reproduction_planner_agent() -> Agent:
+    """Build an agent that guides reproduction repository work."""
+
+    settings = load_settings()
+    configure_model_provider(settings)
+    return Agent(
+        name="Reproduction Repository Planner",
+        instructions=REPRODUCTION_PLANNER_INSTRUCTIONS,
         model=settings.model,
         tools=[save_research_note],
     )
@@ -427,6 +520,24 @@ def output_invites_follow_up(output: str) -> bool:
     return bool(FOLLOW_UP_INVITATION_PATTERN.search(output.strip()[-1000:]))
 
 
+def looks_like_paper_reading_request(user_text: str) -> bool:
+    """Return True when the user wants to read or discuss a full paper."""
+
+    return bool(PAPER_READING_REQUEST_PATTERN.search(user_text.strip()))
+
+
+def looks_like_artifact_request(user_text: str) -> bool:
+    """Return True when the user wants paper code or dataset artifacts."""
+
+    return bool(ARTIFACT_REQUEST_PATTERN.search(user_text.strip()))
+
+
+def looks_like_reproduction_request(user_text: str) -> bool:
+    """Return True when the user wants repository preparation or implementation."""
+
+    return bool(REPRODUCTION_REQUEST_PATTERN.search(user_text.strip()))
+
+
 async def answer_conference_topic_follow_up(
     user_query: str, discovery_context: str
 ) -> str:
@@ -488,6 +599,306 @@ async def answer_conference_review_follow_up(
         max_turns=12,
     )
     return result.final_output
+
+
+def format_paper_reading_prompt(
+    paper_request: str,
+    paper_source: str,
+    selected_topic: str,
+    paper_context: str,
+    review_context: str,
+) -> str:
+    """Build a grounded full-paper reading prompt."""
+
+    return f"""
+The user wants to read and discuss a complete paper from the literature-review
+workflow. Use only supplied context and explicitly identify missing full-text
+information.
+
+Selected topic:
+{selected_topic}
+
+User-selected paper or reading goal:
+{paper_request}
+
+User-provided paper URL/text/PDF details:
+{paper_source}
+
+Verified paper search context:
+{paper_context}
+
+Review context:
+{review_context}
+""".strip()
+
+
+async def read_selected_paper(
+    paper_request: str,
+    paper_source: str,
+    selected_topic: str,
+    paper_context: str,
+    review_context: str,
+) -> str:
+    """Have the paper-reading agent analyze one selected paper."""
+
+    result = await Runner.run(
+        build_paper_reading_agent(),
+        format_paper_reading_prompt(
+            paper_request, paper_source, selected_topic, paper_context, review_context
+        ),
+        max_turns=16,
+    )
+    return result.final_output
+
+
+def format_artifact_scout_prompt(
+    paper_request: str, selected_topic: str, paper_context: str, reading_context: str
+) -> str:
+    """Build a prompt for finding code and dataset artifacts."""
+
+    return f"""
+Find implementation code and datasets for the selected paper. Search only for
+artifacts related to this paper/topic and label confidence clearly.
+
+Selected topic:
+{selected_topic}
+
+User-selected paper:
+{paper_request}
+
+Verified paper search context:
+{paper_context}
+
+Paper-reading notes, if any:
+{reading_context}
+""".strip()
+
+
+async def scout_code_and_datasets(
+    paper_request: str, selected_topic: str, paper_context: str, reading_context: str
+) -> str:
+    """Find code repositories and datasets for one selected paper."""
+
+    result = await Runner.run(
+        build_artifact_scout_agent(),
+        format_artifact_scout_prompt(
+            paper_request, selected_topic, paper_context, reading_context
+        ),
+        max_turns=16,
+    )
+    return result.final_output
+
+
+def _safe_repo_name(name: str) -> str:
+    """Normalize a user-supplied repository directory name."""
+
+    safe = re.sub(r"[^a-zA-Z0-9._-]+", "-", name.strip()).strip("-._")
+    return safe or "paper-reproduction"
+
+
+def prepare_reproduction_repository(
+    repo_name: str, code_url: str = "", dataset_url: str = ""
+) -> str:
+    """Clone an existing implementation or create a local scaffold repo."""
+
+    REPRODUCTION_REPOS_DIR.mkdir(parents=True, exist_ok=True)
+    repo_path = REPRODUCTION_REPOS_DIR / _safe_repo_name(repo_name)
+    if repo_path.exists() and any(repo_path.iterdir()):
+        raise FileExistsError(f"Repository path already exists and is not empty: {repo_path}")
+
+    code_url = code_url.strip()
+    dataset_url = dataset_url.strip()
+    if code_url:
+        subprocess.run(
+            ["git", "clone", code_url, str(repo_path)],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        action = f"Cloned existing implementation from {code_url}."
+    else:
+        repo_path.mkdir(parents=True, exist_ok=True)
+        (repo_path / "README.md").write_text(
+            "# Paper Reproduction\n\n"
+            "This scaffold was created because no existing code URL was selected.\n\n"
+            "## Next steps\n\n"
+            "1. Add paper-reading notes.\n"
+            "2. Implement the method incrementally.\n"
+            "3. Add tests and reproducible experiment commands.\n",
+            encoding="utf-8",
+        )
+        (repo_path / "src").mkdir(exist_ok=True)
+        (repo_path / "tests").mkdir(exist_ok=True)
+        (repo_path / "data").mkdir(exist_ok=True)
+        (repo_path / "data" / ".gitkeep").write_text("", encoding="utf-8")
+        subprocess.run(["git", "init"], cwd=repo_path, check=True, capture_output=True, text=True)
+        action = "Created a new clean-room scaffold repository."
+
+    if dataset_url:
+        (repo_path / "DATASET.md").write_text(
+            f"# Dataset\n\nSelected dataset URL or instructions:\n\n{dataset_url}\n",
+            encoding="utf-8",
+        )
+
+    return f"{action}\nLocal path: {repo_path}"
+
+
+def format_reproduction_prompt(
+    selected_topic: str,
+    paper_request: str,
+    paper_context: str,
+    reading_context: str,
+    artifact_context: str,
+    repo_result: str,
+) -> str:
+    """Build a prompt for reproduction planning after repo preparation."""
+
+    return f"""
+The user approved repository preparation for reproducing a paper. Create the
+next-step plan and ask for confirmation before any implementation step.
+
+Selected topic:
+{selected_topic}
+
+Selected paper:
+{paper_request}
+
+Verified paper context:
+{paper_context}
+
+Paper-reading notes:
+{reading_context}
+
+Code and dataset artifact notes:
+{artifact_context}
+
+Repository preparation result:
+{repo_result}
+""".strip()
+
+
+async def plan_reproduction_repository(
+    selected_topic: str,
+    paper_request: str,
+    paper_context: str,
+    reading_context: str,
+    artifact_context: str,
+    repo_result: str,
+) -> str:
+    """Create a user-confirmable plan for repo-based reproduction work."""
+
+    result = await Runner.run(
+        build_reproduction_planner_agent(),
+        format_reproduction_prompt(
+            selected_topic,
+            paper_request,
+            paper_context,
+            reading_context,
+            artifact_context,
+            repo_result,
+        ),
+        max_turns=12,
+    )
+    return result.final_output
+
+
+async def _run_paper_reading_sequence(
+    initial_request: str,
+    selected_topic: str,
+    paper_context: str,
+    review_context: str,
+    input_func: Callable[[str], str],
+    output_func: Callable[[str], None],
+) -> tuple[str, str]:
+    """Collect user input and run the paper-reading agent."""
+
+    paper_request = input_func(
+        "Which paper should I read? Enter a paper number/title, or press Enter to use your request: "
+    ).strip() or initial_request
+    paper_source = input_func(
+        "Paste a PDF URL, paper URL, abstract, or text excerpt for grounding (Enter to use verified context only): "
+    ).strip()
+
+    output_func("\n# Paper Reading Assistant\n")
+    reading = await read_selected_paper(
+        paper_request, paper_source, selected_topic, paper_context, review_context
+    )
+    output_func(reading)
+    return paper_request, reading
+
+
+async def _run_artifact_scout_sequence(
+    initial_request: str,
+    selected_topic: str,
+    paper_context: str,
+    reading_context: str,
+    input_func: Callable[[str], str],
+    output_func: Callable[[str], None],
+) -> tuple[str, str]:
+    """Collect user input and search for code and dataset artifacts."""
+
+    paper_request = input_func(
+        "Which paper should I find code/data for? Enter a paper number/title, or press Enter to use your request: "
+    ).strip() or initial_request
+
+    output_func("\n# Code and Dataset Scout\n")
+    artifacts = await scout_code_and_datasets(
+        paper_request, selected_topic, paper_context, reading_context
+    )
+    output_func(artifacts)
+    return paper_request, artifacts
+
+
+async def _run_reproduction_sequence(
+    initial_request: str,
+    selected_topic: str,
+    paper_context: str,
+    reading_context: str,
+    artifact_context: str,
+    input_func: Callable[[str], str],
+    output_func: Callable[[str], None],
+) -> str:
+    """Ask for approval at each repo-preparation step, then plan reproduction."""
+
+    paper_request = input_func(
+        "Which paper should the repo reproduce? Enter a paper number/title, or press Enter to use your request: "
+    ).strip() or initial_request
+    code_url = input_func(
+        "Existing code URL to clone (press Enter if no implementation is available): "
+    ).strip()
+    dataset_url = input_func(
+        "Dataset URL or setup notes (press Enter if unknown/not needed yet): "
+    ).strip()
+    repo_name = input_func(
+        "Local repo directory name under reproduction_repos/: "
+    ).strip()
+    if not repo_name:
+        repo_name = _safe_repo_name(paper_request)
+
+    summary = (
+        f"Prepare repo '{repo_name}'"
+        + (f" by cloning {code_url}" if code_url else " as a new scaffold")
+        + (f" with dataset notes from {dataset_url}" if dataset_url else "")
+    )
+    confirmation = input_func(f"Confirm this step? {summary} [y/N]: ").strip().lower()
+    if confirmation not in {"y", "yes"}:
+        return "Repository preparation cancelled by user before any local changes."
+
+    repo_result = prepare_reproduction_repository(repo_name, code_url, dataset_url)
+    output_func("\n# Reproduction Repository Preparation\n")
+    output_func(repo_result)
+
+    plan = await plan_reproduction_repository(
+        selected_topic,
+        paper_request,
+        paper_context,
+        reading_context,
+        artifact_context,
+        repo_result,
+    )
+    output_func("\n# Reproduction Implementation Plan\n")
+    output_func(plan)
+    return f"{repo_result}\n\n{plan}"
 
 
 async def run_research_workflow(prompt: str) -> str:
@@ -676,18 +1087,61 @@ async def run_interactive_conference_literature_review(
         return review
 
     outputs = [review]
+    latest_reading_context = ""
+    latest_artifact_context = ""
     output_func("\n# Two-Reviewer Critical Literature Review\n")
     output_func(review)
 
     while True:
         follow_up = input_func(
-            "\nAsk a follow-up about this literature review, or press Enter to exit: "
+            "\nAsk a follow-up, request 'read paper', 'find code/data', "
+            "or 'create repo' (Enter to exit): "
         ).strip()
         if follow_up.lower() in EXIT_COMMANDS:
             break
 
+        review_context = "\n\n".join(outputs)
+        if looks_like_reproduction_request(follow_up):
+            reproduction = await _run_reproduction_sequence(
+                follow_up,
+                selected_topic,
+                paper_context,
+                latest_reading_context,
+                latest_artifact_context,
+                input_func,
+                output_func,
+            )
+            outputs.append(f"# Reproduction request: {follow_up}\n\n{reproduction}")
+            continue
+
+        if looks_like_artifact_request(follow_up):
+            paper_request, artifacts = await _run_artifact_scout_sequence(
+                follow_up,
+                selected_topic,
+                paper_context,
+                latest_reading_context or review_context,
+                input_func,
+                output_func,
+            )
+            latest_artifact_context = artifacts
+            outputs.append(f"# Code/data scout for: {paper_request}\n\n{artifacts}")
+            continue
+
+        if looks_like_paper_reading_request(follow_up):
+            paper_request, reading = await _run_paper_reading_sequence(
+                follow_up,
+                selected_topic,
+                paper_context,
+                review_context,
+                input_func,
+                output_func,
+            )
+            latest_reading_context = reading
+            outputs.append(f"# Paper reading for: {paper_request}\n\n{reading}")
+            continue
+
         follow_up_answer = await answer_conference_review_follow_up(
-            follow_up, selected_topic, paper_context, "\n\n".join(outputs)
+            follow_up, selected_topic, paper_context, review_context
         )
         outputs.append(f"# Follow-up: {follow_up}\n\n{follow_up_answer}")
         output_func(f"\n{follow_up_answer}")
