@@ -13,8 +13,7 @@ from research_agents.workflow import (
     resolve_topic_selection,
 )
 
-
-DISCOVERY_CONTEXT_WITH_QUERY_MENU = '''
+DISCOVERY_CONTEXT_WITH_QUERY_MENU = """
 3. **Select a Topic to Explore Further** (run via OpenAI API with search queries):
 
    1. **Multimodal Reasoning with LLMs and Vision Transformers**
@@ -34,17 +33,24 @@ DISCOVERY_CONTEXT_WITH_QUERY_MENU = '''
 
    6. **Cross-Modal Few-Shot Learning**
       *Query*: "Cross-modal few-shot learning WACV 2026 NeurIPS 2025"
-'''
+"""
 
 
 def test_handoff_tool_name_accepts_special_character_display_names() -> None:
-    assert build_handoff_tool_name("Critical Reviewer") == "transfer_to_critical_reviewer"
-    assert build_handoff_tool_name("R&D / Safety-Reviewer!") == "transfer_to_r_d_safety_reviewer"
+    assert (
+        build_handoff_tool_name("Critical Reviewer") == "transfer_to_critical_reviewer"
+    )
+    assert (
+        build_handoff_tool_name("R&D / Safety-Reviewer!")
+        == "transfer_to_r_d_safety_reviewer"
+    )
     assert build_handoff_tool_name("🔎⚠️") == "transfer_to_agent"
     assert build_handoff_tool_name("2026 Reviewer") == "transfer_to_agent_2026_reviewer"
 
 
-def test_orchestrator_uses_safe_handoff_tool_names_without_changing_display_names() -> None:
+def test_orchestrator_uses_safe_handoff_tool_names_without_changing_display_names() -> (
+    None
+):
     from research_agents.workflow import build_research_orchestrator
 
     orchestrator = build_research_orchestrator()
@@ -163,7 +169,9 @@ def test_follow_up_detection_for_paper_to_code_requests() -> None:
     assert looks_like_reproduction_request("create a repo to implement this paper")
 
 
-def test_prepare_reproduction_repository_creates_scaffold(tmp_path, monkeypatch) -> None:
+def test_prepare_reproduction_repository_creates_scaffold(
+    tmp_path, monkeypatch
+) -> None:
     import research_agents.workflow as workflow
 
     monkeypatch.setattr(workflow, "REPRODUCTION_REPOS_DIR", tmp_path)
@@ -177,11 +185,12 @@ def test_prepare_reproduction_repository_creates_scaffold(tmp_path, monkeypatch)
     assert (repo_path / "README.md").exists()
     assert (repo_path / "src").is_dir()
     assert (repo_path / "tests").is_dir()
-    assert (repo_path / "DATASET.md").read_text(encoding="utf-8").strip().endswith(
-        "https://example.com/dataset"
+    assert (
+        (repo_path / "DATASET.md")
+        .read_text(encoding="utf-8")
+        .strip()
+        .endswith("https://example.com/dataset")
     )
-
-
 
 
 def test_create_github_repository_delegates_to_plugin(monkeypatch) -> None:
@@ -211,9 +220,13 @@ def test_github_repo_creator_plugin_manifest_and_marketplace() -> None:
     from pathlib import Path
 
     manifest = json.loads(
-        Path("plugins/github-repo-creator/.codex-plugin/plugin.json").read_text(encoding="utf-8")
+        Path("plugins/github-repo-creator/.codex-plugin/plugin.json").read_text(
+            encoding="utf-8"
+        )
     )
-    marketplace = json.loads(Path(".agents/plugins/marketplace.json").read_text(encoding="utf-8"))
+    marketplace = json.loads(
+        Path(".agents/plugins/marketplace.json").read_text(encoding="utf-8")
+    )
 
     assert manifest["name"] == "github-repo-creator"
     assert manifest["skills"] == "./skills/"
@@ -222,7 +235,9 @@ def test_github_repo_creator_plugin_manifest_and_marketplace() -> None:
     assert marketplace["plugins"][0]["policy"]["authentication"] == "ON_USE"
 
 
-def test_prepare_reproduction_repository_scaffold_includes_dummy_code_and_tests(tmp_path, monkeypatch) -> None:
+def test_prepare_reproduction_repository_scaffold_includes_dummy_code_and_tests(
+    tmp_path, monkeypatch
+) -> None:
     import research_agents.workflow as workflow
 
     monkeypatch.setattr(workflow, "REPRODUCTION_REPOS_DIR", tmp_path)
@@ -236,7 +251,9 @@ def test_prepare_reproduction_repository_scaffold_includes_dummy_code_and_tests(
     assert (repo_path / ".git").is_dir()
 
 
-def test_prepare_reproduction_repository_can_create_github_remote(tmp_path, monkeypatch) -> None:
+def test_prepare_reproduction_repository_can_create_github_remote(
+    tmp_path, monkeypatch
+) -> None:
     import research_agents.workflow as workflow
 
     calls: list[dict[str, object]] = []
@@ -264,17 +281,26 @@ def test_prepare_reproduction_repository_can_create_github_remote(tmp_path, monk
             "owner": "example-org",
         }
     ]
-    assert "Created GitHub repository https://github.com/example/smoke-test-repo" in result
-    remotes = __import__("subprocess").run(
-        ["git", "remote", "get-url", "origin"],
-        cwd=repo_path,
-        check=True,
-        capture_output=True,
-        text=True,
-    ).stdout.strip()
+    assert (
+        "Created GitHub repository https://github.com/example/smoke-test-repo" in result
+    )
+    remotes = (
+        __import__("subprocess")
+        .run(
+            ["git", "remote", "get-url", "origin"],
+            cwd=repo_path,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        .stdout.strip()
+    )
     assert remotes == "https://github.com/example/smoke-test-repo"
 
-def test_interactive_conference_review_supports_paper_to_repo_path(monkeypatch, tmp_path) -> None:
+
+def test_interactive_conference_review_supports_paper_to_repo_path(
+    monkeypatch, tmp_path
+) -> None:
     import asyncio
     import research_agents.workflow as workflow
 
@@ -299,7 +325,10 @@ def test_interactive_conference_review_supports_paper_to_repo_path(monkeypatch, 
         return "reading notes"
 
     async def fake_artifacts(
-        paper_request: str, selected_topic: str, paper_context: str, reading_context: str
+        paper_request: str,
+        selected_topic: str,
+        paper_context: str,
+        reading_context: str,
     ) -> str:
         assert paper_request == "Paper A"
         assert "reading notes" in reading_context
@@ -394,7 +423,9 @@ def test_web_research_api_delegates_to_workflow(monkeypatch) -> None:
 
     monkeypatch.setattr(workflow, "run_research_workflow", fake_run_research_workflow)
 
-    result = asyncio.run(handle_api_request("/api/research", {"prompt": "Map the field"}))
+    result = asyncio.run(
+        handle_api_request("/api/research", {"prompt": "Map the field"})
+    )
 
     assert result == {"output": "mapped"}
 
@@ -443,6 +474,24 @@ def test_format_paper_coding_prompt_includes_identifier_goal_and_ideas() -> None
     assert "qwen2.5-coder:7b" in prompt
 
 
+def test_format_workspace_coding_request_prompt_includes_selected_file() -> None:
+    from research_agents.workflow import format_workspace_coding_request_prompt
+
+    prompt = format_workspace_coding_request_prompt(
+        "/tmp/reproduction_repos/example",
+        "src/\n  model.py",
+        "Refactor the training loop and suggest improvements.",
+        "src/model.py",
+        "def train():\n    pass",
+    )
+
+    assert "/tmp/reproduction_repos/example" in prompt
+    assert "src/model.py" in prompt
+    assert "def train" in prompt
+    assert "Recommended changes" in prompt
+    assert "Additional improvement suggestions" in prompt
+
+
 def test_web_coding_api_delegates_to_workflow(monkeypatch) -> None:
     import asyncio
     import research_agents.workflow as workflow
@@ -472,7 +521,9 @@ def test_web_coding_api_delegates_to_workflow(monkeypatch) -> None:
     assert result == {"output": "coding plan"}
 
 
-def test_prepare_paper_coding_environment_creates_stepwise_workspace(tmp_path, monkeypatch) -> None:
+def test_prepare_paper_coding_environment_creates_stepwise_workspace(
+    tmp_path, monkeypatch
+) -> None:
     import research_agents.workflow as workflow
 
     monkeypatch.setattr(workflow, "REPRODUCTION_REPOS_DIR", tmp_path)
@@ -492,10 +543,14 @@ def test_prepare_paper_coding_environment_creates_stepwise_workspace(tmp_path, m
     assert (repo_path / "experiments" / "README.md").exists()
     assert (repo_path / "notebooks" / ".gitkeep").exists()
     assert (repo_path / "artifacts" / ".gitkeep").exists()
-    assert (repo_path / ".env.example").read_text(encoding="utf-8").splitlines()[1] == "RESEARCH_AGENTS_MODEL=coding"
+    assert (repo_path / ".env.example").read_text(encoding="utf-8").splitlines()[
+        1
+    ] == "RESEARCH_AGENTS_MODEL=coding"
 
 
-def test_prepare_paper_coding_environment_uses_unique_paths(tmp_path, monkeypatch) -> None:
+def test_prepare_paper_coding_environment_uses_unique_paths(
+    tmp_path, monkeypatch
+) -> None:
     import research_agents.workflow as workflow
 
     monkeypatch.setattr(workflow, "REPRODUCTION_REPOS_DIR", tmp_path)
@@ -509,7 +564,9 @@ def test_prepare_paper_coding_environment_uses_unique_paths(tmp_path, monkeypatc
     assert (tmp_path / "Paper-A-coding-lab-2").exists()
 
 
-def test_run_paper_coding_agent_returns_setup_help_when_model_missing(tmp_path, monkeypatch) -> None:
+def test_run_paper_coding_agent_returns_setup_help_when_model_missing(
+    tmp_path, monkeypatch
+) -> None:
     import asyncio
     import research_agents.workflow as workflow
 

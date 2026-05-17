@@ -32,20 +32,47 @@ def test_home_page_contains_persistent_memory_layout() -> None:
     assert "agent-running-logo" in html
     assert "setAgentRunning(true)" in html
     assert "setAgentRunning(false)" in html
-    assert ".conversation-list { display: grid; align-content: start; gap: 8px; overflow-y: auto;" in html
+    assert (
+        ".conversation-list { display: grid; align-content: start; gap: 8px; overflow-y: auto;"
+        in html
+    )
     assert ".suggestions { display: grid; gap: 12px; overflow-y: auto;" in html
     assert ".launchpad-panel { overflow: hidden; padding: 22px; gap: 14px; }" in html
     assert ".help-icon::after" in html
     assert "top: calc(100% + 9px)" in html
-    assert ".workspace.card { background: transparent; border-color: transparent; box-shadow: none; backdrop-filter: none; padding: 0; }" in html
-    assert ".modebar { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 7px; margin-bottom: 12px; }" in html
+    assert (
+        ".workspace.card { background: transparent; border-color: transparent; box-shadow: none; backdrop-filter: none; padding: 0; }"
+        in html
+    )
+    assert (
+        ".modebar { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 7px; margin-bottom: 12px; }"
+        in html
+    )
     assert "font-size: 12px; line-height: 1.15; white-space: nowrap;" in html
-    assert ".actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: stretch; margin-top: 12px; }" in html
-    assert ".primary, .secondary, .memory-pill { min-height: 42px; border-radius: 16px; padding: 10px 12px; font-size: 13px; line-height: 1.15; font-weight: 800; display: inline-flex; align-items: center; justify-content: center; text-align: center; white-space: nowrap; }" in html
-    assert ".primary, .secondary { width: 112px; flex: 0 0 112px; cursor: pointer; }" in html
-    assert ".memory-pill { color: var(--accent); border: 1px solid rgba(124,247,212,.4); margin-left: auto; min-width: 170px; }" in html
-    assert ".agent-running.visible { display: inline-flex; flex-basis: 100%; justify-content: center; }" in html
-    assert "Choose a model before running agents. Local presets use your configured OpenAI-compatible provider." in html
+    assert (
+        ".actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: stretch; margin-top: 12px; }"
+        in html
+    )
+    assert (
+        ".primary, .secondary, .memory-pill { min-height: 42px; border-radius: 16px; padding: 10px 12px; font-size: 13px; line-height: 1.15; font-weight: 800; display: inline-flex; align-items: center; justify-content: center; text-align: center; white-space: nowrap; }"
+        in html
+    )
+    assert (
+        ".primary, .secondary { width: 112px; flex: 0 0 112px; cursor: pointer; }"
+        in html
+    )
+    assert (
+        ".memory-pill { color: var(--accent); border: 1px solid rgba(124,247,212,.4); margin-left: auto; min-width: 170px; }"
+        in html
+    )
+    assert (
+        ".agent-running.visible { display: inline-flex; flex-basis: 100%; justify-content: center; }"
+        in html
+    )
+    assert (
+        "Choose a model before running agents. Local presets use your configured OpenAI-compatible provider."
+        in html
+    )
     assert 'id="provider"' not in html
     assert 'id="notes"' not in html
 
@@ -130,29 +157,36 @@ def test_home_page_includes_generated_code_interface_controls() -> None:
     html = build_home_page()
 
     assert 'id="openCodeInterface"' in html
+    assert 'id="showCodeConsole"' in html
     assert 'id="codeInterface"' in html
+    assert 'id="workspaceSelect"' in html
     assert 'id="fileTree"' in html
     assert 'id="codeEditor"' in html
+    assert 'id="askCodeAgent"' in html
+    assert 'id="codeAgentRequest"' in html
     assert 'id="runDummy"' in html
     assert 'id="publishGithub"' in html
     assert 'id="linkGithub"' in html
     assert 'id="createPullRequest"' in html
     assert 'id="viewPullRequest"' in html
-    assert ".code-interface-actions { display: grid; grid-auto-flow: column; grid-auto-columns: max-content; gap: 8px; justify-content: end; overflow-x: auto; white-space: nowrap; }" in html
-    assert 'publishWorkspaceToGithub' in html
-    assert 'linkWorkspaceToGithub' in html
-    assert 'createWorkspacePullRequest' in html
-    assert '/api/coding/files' in html
-    assert '/api/coding/file' in html
-    assert '/api/coding/save' in html
-    assert '/api/coding/run' in html
-    assert '/api/coding/publish' in html
-    assert '/api/coding/link' in html
-    assert '/api/coding/create-pr' in html
-    assert 'state.currentWorkspace = data.workspace' in html
+    assert "publishWorkspaceToGithub" in html
+    assert "linkWorkspaceToGithub" in html
+    assert "createWorkspacePullRequest" in html
+    assert "/api/coding/workspaces" in html
+    assert "/api/coding/files" in html
+    assert "/api/coding/file" in html
+    assert "/api/coding/save" in html
+    assert "/api/coding/run" in html
+    assert "/api/coding/advise" in html
+    assert "/api/coding/publish" in html
+    assert "/api/coding/link" in html
+    assert "/api/coding/create-pr" in html
+    assert "state.currentWorkspace = data.workspace" in html
 
 
-def test_coding_workspace_file_api_reads_saves_and_runs_dummy_data(tmp_path, monkeypatch) -> None:
+def test_coding_workspace_file_api_reads_saves_and_runs_dummy_data(
+    tmp_path, monkeypatch
+) -> None:
     import asyncio
     import research_agents.workflow as workflow
     from research_agents.web import handle_api_request
@@ -203,7 +237,78 @@ def test_coding_workspace_file_api_reads_saves_and_runs_dummy_data(tmp_path, mon
     assert "DatasetSummary" in run_result["output"]
 
 
-def test_coding_workspace_link_api_enables_manual_github_connection(tmp_path, monkeypatch) -> None:
+def test_coding_workspace_list_api_discovers_saved_workspaces(
+    tmp_path, monkeypatch
+) -> None:
+    import asyncio
+    import research_agents.workflow as workflow
+    from research_agents.web import handle_api_request
+
+    monkeypatch.chdir(tmp_path)
+    workflow.prepare_paper_coding_environment("Saved Workspace")
+
+    result = asyncio.run(handle_api_request("/api/coding/workspaces", {}))
+
+    assert result["root"].endswith("reproduction_repos")
+    assert [workspace["name"] for workspace in result["workspaces"]] == [
+        "Saved-Workspace-coding-lab"
+    ]
+    assert result["workspaces"][0]["path"].endswith("Saved-Workspace-coding-lab")
+
+
+def test_coding_workspace_advise_api_delegates_to_workflow(
+    tmp_path, monkeypatch
+) -> None:
+    import asyncio
+    import research_agents.workflow as workflow
+    from research_agents.web import handle_api_request
+
+    monkeypatch.chdir(tmp_path)
+    workspace_text = workflow.prepare_paper_coding_environment("Advice Smoke")
+    workspace = re.search(r"Created local workspace: (.+)", workspace_text).group(1)
+
+    async def fake_advise_existing_coding_workspace(
+        workspace_path: str,
+        file_tree: str,
+        user_request: str,
+        selected_path: str = "",
+        selected_content: str = "",
+    ) -> str:
+        assert workspace_path == str(Path(workspace).resolve())
+        assert "baseline.py" in file_tree
+        assert user_request == "Suggest tests"
+        assert selected_path == "src/reproduction_baseline/baseline.py"
+        assert "def majority_label" in selected_content
+        return "Add tests for label ties."
+
+    monkeypatch.setattr(
+        workflow,
+        "advise_existing_coding_workspace",
+        fake_advise_existing_coding_workspace,
+    )
+    selected_file = Path(workspace) / "src" / "reproduction_baseline" / "baseline.py"
+
+    result = asyncio.run(
+        handle_api_request(
+            "/api/coding/advise",
+            {
+                "workspace": workspace,
+                "path": "src/reproduction_baseline/baseline.py",
+                "content": selected_file.read_text(encoding="utf-8"),
+                "request": "Suggest tests",
+            },
+        )
+    )
+
+    assert result == {
+        "workspace": str(Path(workspace).resolve()),
+        "output": "Add tests for label ties.",
+    }
+
+
+def test_coding_workspace_link_api_enables_manual_github_connection(
+    tmp_path, monkeypatch
+) -> None:
     import asyncio
     import subprocess
     import research_agents.workflow as workflow
@@ -236,7 +341,9 @@ def test_coding_workspace_link_api_enables_manual_github_connection(tmp_path, mo
     assert remote_url == str(bare_repo)
 
 
-def test_coding_workspace_publish_failure_points_to_link_button(tmp_path, monkeypatch) -> None:
+def test_coding_workspace_publish_failure_points_to_link_button(
+    tmp_path, monkeypatch
+) -> None:
     import asyncio
     import research_agents.workflow as workflow
     from research_agents.web import handle_api_request
@@ -265,7 +372,9 @@ def test_coding_workspace_publish_failure_points_to_link_button(tmp_path, monkey
     assert "Link GitHub" in publish_result["manual_link_hint"]
 
 
-def test_coding_workspace_publish_api_creates_remote_and_pushes(tmp_path, monkeypatch) -> None:
+def test_coding_workspace_publish_api_creates_remote_and_pushes(
+    tmp_path, monkeypatch
+) -> None:
     import asyncio
     import subprocess
     import research_agents.workflow as workflow
@@ -326,7 +435,10 @@ def test_coding_workspace_publish_api_creates_remote_and_pushes(tmp_path, monkey
     assert pr_result["pull_request_created"] is False
     assert pr_result["html_url"] == str(bare_repo)
     assert pr_result["branch"] == "researchagent-coding-workspace-1234567890"
-    assert "push -u origin researchagent-coding-workspace-1234567890" in pr_result["push_command"]
+    assert (
+        "push -u origin researchagent-coding-workspace-1234567890"
+        in pr_result["push_command"]
+    )
     refs = subprocess.run(
         ["git", "for-each-ref", "--format=%(refname:short)", "refs/heads"],
         cwd=bare_repo,
