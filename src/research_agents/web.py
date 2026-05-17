@@ -15,7 +15,7 @@ from pathlib import Path
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
-from urllib.parse import urlparse
+from urllib.parse import urlencode, urlparse
 
 from .config import (
     format_local_model_presets,
@@ -369,6 +369,7 @@ def build_home_page() -> str:
         <span id="workspacePath">No workspace loaded yet.</span>
       </div>
       <div class="code-interface-actions">
+        <button class="secondary" id="publishGithub" type="button">Publish GitHub</button>
         <button class="secondary" id="refreshTree" type="button">Refresh tree</button>
         <button class="secondary" id="saveCode" type="button">Save code</button>
         <button class="primary" id="runDummy" type="button">Run dummy</button>
@@ -384,7 +385,7 @@ def build_home_page() -> str:
         <div class="editor-meta"><h3>Code console</h3><span id="selectedFile">Select a file to edit.</span></div>
         <textarea class="code-editor" id="codeEditor" spellcheck="false" placeholder="Select a generated file from the tree. Changes are saved back to the local workspace."></textarea>
         <div class="editor-meta"><span>Dummy-data verification runs the generated scaffold against data/dummy_dataset.csv.</span><span id="saveState">Idle</span></div>
-        <pre class="run-console" id="runConsole">Run output will appear here.</pre>
+        <pre class="run-console" id="runConsole">Run output will appear here. Use Publish GitHub to create a GitHub repository with the repo-local plugin and push this workspace.</pre>
       </section>
     </div>
   </section>
@@ -539,6 +540,26 @@ def build_home_page() -> str:
       const data = await postJSON('/api/coding/run', {{ workspace: state.currentWorkspace }});
       $('runConsole').textContent = data.command + '\\n\\nExit code: ' + data.returncode + '\\n\\n' + (data.output || '(no output)');
     }}
+    function defaultGithubRepoName() {{
+      const workspace = state.currentWorkspace.split(/[\\/]/).filter(Boolean).pop() || 'paper-coding-workspace';
+      return workspace.replace(/[^a-zA-Z0-9._-]+/g, '-').replace(/^-+|-+$/g, '') || 'paper-coding-workspace';
+    }}
+    async function publishWorkspaceToGithub() {{
+      if (!state.currentWorkspace) {{ $('runConsole').textContent = 'No generated workspace yet.'; return; }}
+      const repoName = prompt('GitHub repository name', defaultGithubRepoName());
+      if (!repoName) {{ $('runConsole').textContent = 'GitHub publish cancelled.'; return; }}
+      const owner = prompt('Optional GitHub owner or organization (leave blank for your account)', '') || '';
+      const privateRepo = confirm('Create this GitHub repository as private? Press Cancel for public.');
+      $('runConsole').textContent = 'Publishing workspace to GitHub…';
+      const data = await postJSON('/api/coding/publish', {{ workspace: state.currentWorkspace, repo: repoName, owner, private: privateRepo }});
+      const lines = [data.message || 'GitHub publish request finished.'];
+      if (data.html_url) lines.push('Repository: ' + data.html_url);
+      if (data.create_url) lines.push('Create repo page: ' + data.create_url);
+      if (data.push_command) lines.push('Manual push command: ' + data.push_command);
+      if (data.error) lines.push('Error: ' + data.error);
+      $('runConsole').textContent = lines.join('\\n');
+      if (data.html_url || data.create_url) window.open(data.html_url || data.create_url, '_blank', 'noopener');
+    }}
     function activateMode(mode) {{
       const targetMode = mode || 'research';
       document.querySelectorAll('.mode').forEach(b => b.classList.toggle('active', b.dataset.mode === targetMode));
@@ -561,6 +582,7 @@ def build_home_page() -> str:
     $('refreshTree').addEventListener('click', () => refreshWorkspaceTree().catch(err => {{ $('fileTree').textContent = 'Error: ' + err.message; }}));
     $('saveCode').addEventListener('click', () => saveWorkspaceFile().catch(err => {{ $('saveState').textContent = 'Error: ' + err.message; }}));
     $('runDummy').addEventListener('click', () => runDummyWorkspace().catch(err => {{ $('runConsole').textContent = 'Error: ' + err.message; }}));
+    $('publishGithub').addEventListener('click', () => publishWorkspaceToGithub().catch(err => {{ $('runConsole').textContent = 'Error: ' + err.message; }}));
     $('run').addEventListener('click', async () => {{
       const prompt = $('prompt').value.trim();
       if (state.mode === 'research' && looksLikeCodingRequest(prompt)) activateMode('coding');
@@ -815,6 +837,125 @@ def _run_workspace_dummy_data(workspace: str) -> dict[str, Any]:
     }
 
 
+def _github_new_repo_url(
+    repo_name: str, description: str = "", private: bool = False
+) -> str:
+    """Return a GitHub web URL for manual repository creation fallback."""
+
+    query = {
+        "name": repo_name.strip() or "paper-coding-workspace",
+        "description": description.strip() or "ResearchAgent coding workspace",
+        "visibility": "private" if private else "public",
+    }
+    return "https://github.com/new?" + urlencode(query)
+
+
+def _commit_workspace_changes(root: Path) -> None:
+    """Ensure the generated workspace has a commit containing current files."""
+
+    if not (root / ".git").is_dir():
+        subprocess.run(
+            ["git", "init"], cwd=root, check=True, capture_output=True, text=True
+        )
+    subprocess.run(
+        ["git", "add", "-A"], cwd=root, check=True, capture_output=True, text=True
+    )
+    diff = subprocess.run(
+        ["git", "diff", "--cached", "--quiet"],
+        cwd=root,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if diff.returncode == 1:
+        subprocess.run(
+            [
+                "git",
+                "-c",
+                "user.name=ResearchAgent",
+                "-c",
+                "user.email=researchagent@example.com",
+                "commit",
+                "-m",
+                "Publish coding workspace",
+            ],
+            cwd=root,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    elif diff.returncode != 0:
+        raise RuntimeError(diff.stderr.strip() or "git diff failed")
+
+
+def _publish_workspace_to_github(
+    workspace: str, repo_name: str, owner: str = "", private: bool = False
+) -> dict[str, Any]:
+    """Create a GitHub repository with the plugin and push workspace files."""
+
+    from .workflow import _add_github_remote, create_github_repository
+
+    root = _resolve_workspace(workspace)
+    safe_repo_name = repo_name.strip() or root.name
+    description = f"ResearchAgent coding workspace from {root.name}"
+    create_url = _github_new_repo_url(safe_repo_name, description, private)
+    try:
+        html_url = create_github_repository(
+            safe_repo_name,
+            description=description,
+            private=private,
+            owner=owner.strip(),
+        )
+    except Exception as exc:
+        return {
+            "published": False,
+            "pushed": False,
+            "create_url": create_url,
+            "error": str(exc),
+            "message": (
+                "Could not create the repository automatically. A GitHub repo "
+                "creation page was opened; create the repo there, then add it "
+                "as a remote and push the workspace."
+            ),
+        }
+
+    remote_name = "origin"
+    push_command = f"git -C {root} push -u {remote_name} HEAD:main"
+    try:
+        _commit_workspace_changes(root)
+        remote_name = _add_github_remote(root, html_url)
+        push_command = f"git -C {root} push -u {remote_name} HEAD:main"
+        subprocess.run(
+            ["git", "push", "-u", remote_name, "HEAD:main"],
+            cwd=root,
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+    except Exception as exc:
+        return {
+            "published": True,
+            "pushed": False,
+            "html_url": html_url,
+            "create_url": create_url,
+            "push_command": push_command,
+            "error": str(exc),
+            "message": (
+                "GitHub repository was created, but automatic push failed. "
+                "Run the manual push command from a terminal with GitHub auth."
+            ),
+        }
+
+    return {
+        "published": True,
+        "pushed": True,
+        "html_url": html_url,
+        "push_command": push_command,
+        "message": "Published the coding workspace to GitHub and pushed all files.",
+    }
+
+
 async def handle_api_request(path: str, payload: dict[str, Any]) -> dict[str, Any]:
     """Route a JSON API request to the appropriate agent workflow."""
 
@@ -905,6 +1046,17 @@ async def _handle_api_request(path: str, payload: dict[str, Any]) -> dict[str, A
 
     if path == "/api/coding/run":
         return _run_workspace_dummy_data(_require_text(payload, "workspace"))
+
+    if path == "/api/coding/publish":
+        private = payload.get("private", False)
+        if not isinstance(private, bool):
+            raise ValueError("'private' must be a boolean")
+        return _publish_workspace_to_github(
+            _require_text(payload, "workspace"),
+            _require_text(payload, "repo"),
+            _optional_text(payload, "owner"),
+            private,
+        )
 
     raise KeyError(path)
 

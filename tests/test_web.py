@@ -134,10 +134,13 @@ def test_home_page_includes_generated_code_interface_controls() -> None:
     assert 'id="fileTree"' in html
     assert 'id="codeEditor"' in html
     assert 'id="runDummy"' in html
+    assert 'id="publishGithub"' in html
+    assert 'publishWorkspaceToGithub' in html
     assert '/api/coding/files' in html
     assert '/api/coding/file' in html
     assert '/api/coding/save' in html
     assert '/api/coding/run' in html
+    assert '/api/coding/publish' in html
     assert 'state.currentWorkspace = data.workspace' in html
 
 
@@ -190,3 +193,52 @@ def test_coding_workspace_file_api_reads_saves_and_runs_dummy_data(tmp_path, mon
     )
     assert run_result["returncode"] == 0
     assert "DatasetSummary" in run_result["output"]
+
+
+def test_coding_workspace_publish_api_creates_remote_and_pushes(tmp_path, monkeypatch) -> None:
+    import asyncio
+    import subprocess
+    import research_agents.workflow as workflow
+    from research_agents.web import handle_api_request
+
+    monkeypatch.chdir(tmp_path)
+    workspace_text = workflow.prepare_paper_coding_environment("Publish Smoke")
+    workspace = re.search(r"Created local workspace: (.+)", workspace_text).group(1)
+    bare_repo = tmp_path / "publish-smoke.git"
+    subprocess.run(["git", "init", "--bare", str(bare_repo)], check=True)
+
+    def fake_create_github_repository(
+        repo_name: str,
+        *,
+        description: str = "",
+        private: bool = False,
+        owner: str = "",
+        token: str | None = None,
+    ) -> str:
+        assert repo_name == "publish-smoke"
+        assert "Publish-Smoke-coding-lab" in description
+        assert private is True
+        assert owner == "example-org"
+        assert token is None
+        return str(bare_repo)
+
+    monkeypatch.setattr(
+        workflow, "create_github_repository", fake_create_github_repository
+    )
+
+    result = asyncio.run(
+        handle_api_request(
+            "/api/coding/publish",
+            {
+                "workspace": workspace,
+                "repo": "publish-smoke",
+                "private": True,
+                "owner": "example-org",
+            },
+        )
+    )
+
+    assert result["published"] is True
+    assert result["pushed"] is True
+    assert result["html_url"] == str(bare_repo)
+    assert "push -u origin HEAD:main" in result["push_command"]
