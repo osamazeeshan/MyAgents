@@ -36,6 +36,8 @@ def test_home_page_contains_persistent_memory_layout() -> None:
     assert ".help-icon::after" in html
     assert "top: calc(100% + 9px)" in html
     assert ".workspace.card { background: transparent; border-color: transparent; box-shadow: none; backdrop-filter: none; padding: 0; }" in html
+    assert ".modebar { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 7px; margin-bottom: 12px; }" in html
+    assert "font-size: 12px; line-height: 1.15; white-space: nowrap;" in html
     assert "Choose a model before running agents. Local presets use your configured OpenAI-compatible provider." in html
     assert 'id="provider"' not in html
     assert 'id="notes"' not in html

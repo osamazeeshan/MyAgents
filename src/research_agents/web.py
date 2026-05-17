@@ -196,8 +196,8 @@ def build_home_page() -> str:
     }}
     .output .empty {{ color: var(--muted); }}
     .composer {{ border: 1px solid var(--border); background: rgba(3, 6, 20, .52); border-radius: 22px; padding: 14px; }}
-    .modebar {{ display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 12px; }}
-    .mode {{ border: 1px solid var(--border); border-radius: 999px; padding: 10px 14px; color: var(--muted); background: transparent; cursor: pointer; }}
+    .modebar {{ display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 7px; margin-bottom: 12px; }}
+    .mode {{ border: 1px solid var(--border); border-radius: 999px; padding: 7px 8px; color: var(--muted); background: transparent; cursor: pointer; font-size: 12px; line-height: 1.15; white-space: nowrap; }}
     .mode.active {{ color: #06120f; background: var(--accent); border-color: var(--accent); font-weight: 800; }}
     textarea, input {{
       width: 100%; border: 1px solid var(--border); background: rgba(5,8,24,.86); color: var(--text);
@@ -236,6 +236,7 @@ def build_home_page() -> str:
       main {{ grid-template-columns: 1fr; }}
       .status {{ min-width: 0; }}
       .workspace {{ min-height: 720px; }}
+      .modebar {{ grid-template-columns: repeat(2, minmax(0, 1fr)); }}
     }}
     @media (max-width: 680px) {{ .status {{ grid-template-columns: 1fr; }} }}
   </style>
