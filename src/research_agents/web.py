@@ -259,10 +259,10 @@ def build_home_page() -> str:
     .code-interface-button.visible {{ display: inline-flex; align-items: center; justify-content: center; }}
     .code-interface {{ position: fixed; inset: 14px; z-index: 20; display: none; grid-template-rows: auto 1fr; border: 1px solid var(--border); border-radius: 24px; background: rgba(7,8,23,.96); box-shadow: var(--shadow); overflow: hidden; backdrop-filter: blur(22px); }}
     .code-interface.visible {{ display: grid; }}
-    .code-interface-header {{ display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 14px 16px; border-bottom: 1px solid var(--border); background: rgba(31,37,75,.72); }}
+    .code-interface-header {{ display: grid; grid-template-columns: minmax(180px, auto) minmax(0, 1fr); align-items: center; gap: 14px; padding: 14px 16px; border-bottom: 1px solid var(--border); background: rgba(31,37,75,.72); }}
     .code-interface-header h2 {{ margin: 0; font-size: 18px; letter-spacing: -.02em; }}
     .code-interface-header span {{ color: var(--muted); font-size: 12px; }}
-    .code-interface-actions {{ display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }}
+    .code-interface-actions {{ display: grid; grid-auto-flow: column; grid-auto-columns: max-content; gap: 8px; justify-content: end; overflow-x: auto; white-space: nowrap; }}
     .code-interface-body {{ display: grid; grid-template-columns: minmax(220px, 300px) minmax(0, 1fr); min-height: 0; }}
     .file-tree-panel {{ border-right: 1px solid var(--border); padding: 14px; min-height: 0; overflow: auto; background: rgba(3,6,20,.38); }}
     .file-tree-panel h3, .editor-panel h3 {{ margin: 0 0 10px; font-size: 12px; color: var(--accent); letter-spacing: .08em; text-transform: uppercase; }}
@@ -287,6 +287,8 @@ def build_home_page() -> str:
       .primary, .secondary, .memory-pill {{ width: auto; min-width: 0; }}
       .primary, .secondary {{ flex-basis: auto; }}
       .memory-pill {{ margin-left: 0; }}
+      .code-interface-header {{ grid-template-columns: 1fr; }}
+      .code-interface-actions {{ justify-content: start; }}
       .code-interface-body {{ grid-template-columns: 1fr; }}
       .file-tree-panel {{ border-right: 0; border-bottom: 1px solid var(--border); max-height: 220px; }}
     }}
@@ -375,6 +377,7 @@ def build_home_page() -> str:
       </div>
       <div class="code-interface-actions">
         <button class="secondary" id="publishGithub" type="button">Publish GitHub</button>
+        <button class="secondary" id="linkGithub" type="button">Link GitHub</button>
         <button class="secondary" id="createPullRequest" type="button" disabled>Create PR</button>
         <button class="secondary" id="viewPullRequest" type="button" disabled>View PR</button>
         <button class="secondary" id="refreshTree" type="button">Refresh tree</button>
@@ -564,11 +567,26 @@ def build_home_page() -> str:
       const lines = [data.message || 'GitHub publish request finished.'];
       if (data.html_url) {{ state.githubRepoUrl = data.html_url; lines.push('Repository: ' + data.html_url); }}
       if (data.create_url) lines.push('Create repo page: ' + data.create_url);
+      if (data.manual_link_hint) lines.push(data.manual_link_hint);
       if (data.error) lines.push('Error: ' + data.error);
       $('runConsole').textContent = lines.join('\\n');
       updateCodeInterfaceButton();
       const publishUrl = data.html_url || data.create_url;
       if (publishUrl) window.open(publishUrl, '_blank', 'noopener');
+    }}
+    async function linkWorkspaceToGithub() {{
+      if (!state.currentWorkspace) {{ $('runConsole').textContent = 'No generated workspace yet.'; return; }}
+      const existing = state.githubRepoUrl || '';
+      const repoUrl = prompt('Paste the GitHub repository URL after creating it', existing);
+      if (!repoUrl) {{ $('runConsole').textContent = 'GitHub link cancelled.'; return; }}
+      $('runConsole').textContent = 'Linking workspace to GitHub repository…';
+      const data = await postJSON('/api/coding/link', {{ workspace: state.currentWorkspace, repo_url: repoUrl }});
+      const lines = [data.message || 'GitHub link request finished.'];
+      if (data.html_url) {{ state.githubRepoUrl = data.html_url; lines.push('Repository: ' + data.html_url); }}
+      if (data.remote_name) lines.push('Remote: ' + data.remote_name);
+      if (data.error) lines.push('Error: ' + data.error);
+      $('runConsole').textContent = lines.join('\\n');
+      updateCodeInterfaceButton();
     }}
     async function createWorkspacePullRequest() {{
       if (!state.currentWorkspace) {{ $('runConsole').textContent = 'No generated workspace yet.'; return; }}
@@ -612,6 +630,7 @@ def build_home_page() -> str:
     $('saveCode').addEventListener('click', () => saveWorkspaceFile().catch(err => {{ $('saveState').textContent = 'Error: ' + err.message; }}));
     $('runDummy').addEventListener('click', () => runDummyWorkspace().catch(err => {{ $('runConsole').textContent = 'Error: ' + err.message; }}));
     $('publishGithub').addEventListener('click', () => publishWorkspaceToGithub().catch(err => {{ $('runConsole').textContent = 'Error: ' + err.message; }}));
+    $('linkGithub').addEventListener('click', () => linkWorkspaceToGithub().catch(err => {{ $('runConsole').textContent = 'Error: ' + err.message; }}));
     $('createPullRequest').addEventListener('click', () => createWorkspacePullRequest().catch(err => {{ $('runConsole').textContent = 'Error: ' + err.message; }}));
     $('viewPullRequest').addEventListener('click', viewPullRequest);
     $('run').addEventListener('click', async () => {{
@@ -1092,6 +1111,29 @@ def _push_workspace_pull_request_branch(root: Path, html_url: str) -> dict[str, 
     }
 
 
+def _link_workspace_to_github(workspace: str, repo_url: str) -> dict[str, Any]:
+    """Link an existing GitHub repository URL as the workspace remote."""
+
+    from .workflow import _add_github_remote
+
+    root = _resolve_workspace(workspace)
+    html_url = repo_url.strip().removesuffix(".git")
+    if not html_url:
+        raise ValueError("'repo_url' is required")
+    remote_name = _add_github_remote(root, html_url)
+    return {
+        "published": True,
+        "linked": True,
+        "create_pr_enabled": True,
+        "html_url": html_url,
+        "remote_name": remote_name,
+        "message": (
+            "GitHub repository linked. Use Create PR to bundle current "
+            "workspace changes into a reviewable pull request."
+        ),
+    }
+
+
 def _publish_workspace_to_github(
     workspace: str, repo_name: str, owner: str = "", private: bool = False
 ) -> dict[str, Any]:
@@ -1118,10 +1160,14 @@ def _publish_workspace_to_github(
             "create_pr_enabled": False,
             "create_url": create_url,
             "error": str(exc),
+            "manual_link_hint": (
+                "After creating the repository in GitHub, click Link GitHub and "
+                "paste the new repository URL to enable Create PR."
+            ),
             "message": (
                 "Could not create and link the repository automatically. A GitHub "
-                "repo creation page was opened; create the repo there, then link "
-                "it as a git remote before creating a pull request."
+                "repo creation page was opened; create the repo there, then use "
+                "Link GitHub to connect it before creating a pull request."
             ),
         }
 
@@ -1287,6 +1333,11 @@ async def _handle_api_request(path: str, payload: dict[str, Any]) -> dict[str, A
             _require_text(payload, "repo"),
             _optional_text(payload, "owner"),
             private,
+        )
+
+    if path == "/api/coding/link":
+        return _link_workspace_to_github(
+            _require_text(payload, "workspace"), _require_text(payload, "repo_url")
         )
 
     if path == "/api/coding/create-pr":
