@@ -242,3 +242,68 @@ def test_interactive_conference_review_supports_paper_to_repo_path(monkeypatch, 
     assert "# Code/data scout for: Paper A" in transcript
     assert "# Reproduction request: create repo to implement this paper" in transcript
     assert (tmp_path / "paper-a-repro" / "README.md").exists()
+
+
+def test_agentarium_home_page_includes_name_and_modes() -> None:
+    from research_agents.web import APP_NAME, build_home_page
+
+    html = build_home_page()
+
+    assert APP_NAME in html
+    assert "Ask the agent crew" in html
+    assert "Discover conference topics" in html
+    assert "Review selected topic" in html
+    assert "Conference follow-up" in html
+
+
+def test_agentarium_requires_prompt_for_research_api() -> None:
+    import asyncio
+    import pytest
+    from research_agents.web import handle_api_request
+
+    with pytest.raises(ValueError, match="'prompt' is required"):
+        asyncio.run(handle_api_request("/api/research", {"prompt": ""}))
+
+
+def test_agentarium_research_api_delegates_to_workflow(monkeypatch) -> None:
+    import asyncio
+    import research_agents.workflow as workflow
+    from research_agents.web import handle_api_request
+
+    async def fake_run_research_workflow(prompt: str) -> str:
+        assert prompt == "Map the field"
+        return "mapped"
+
+    monkeypatch.setattr(workflow, "run_research_workflow", fake_run_research_workflow)
+
+    result = asyncio.run(handle_api_request("/api/research", {"prompt": "Map the field"}))
+
+    assert result == {"output": "mapped"}
+
+
+def test_agentarium_conference_review_api_chains_paper_search_and_review(monkeypatch) -> None:
+    import asyncio
+    import research_agents.workflow as workflow
+    from research_agents.web import handle_api_request
+
+    async def fake_search(topic: str, discovery_context: str = "") -> str:
+        assert topic == "Agent benchmarks"
+        assert discovery_context == "menu"
+        return "papers"
+
+    async def fake_review(topic: str, paper_context: str) -> str:
+        assert topic == "Agent benchmarks"
+        assert paper_context == "papers"
+        return "review"
+
+    monkeypatch.setattr(workflow, "search_papers_for_topic", fake_search)
+    monkeypatch.setattr(workflow, "review_selected_topic", fake_review)
+
+    result = asyncio.run(
+        handle_api_request(
+            "/api/conference/review",
+            {"topic": "Agent benchmarks", "discovery_context": "menu"},
+        )
+    )
+
+    assert result == {"paper_context": "papers", "review": "review"}

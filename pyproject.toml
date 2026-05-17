@@ -15,6 +15,7 @@ dependencies = [
 
 [project.scripts]
 research-agents = "research_agents.cli:main"
+research-agents-web = "research_agents.web:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/research_agents"]
