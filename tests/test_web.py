@@ -5,24 +5,30 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from research_agents.web import build_home_page, create_server, format_memory_augmented_prompt
+from research_agents.web import (
+    build_home_page,
+    create_server,
+    format_memory_augmented_prompt,
+)
 
 
 def test_home_page_contains_persistent_memory_layout() -> None:
     html = build_home_page()
 
-    assert "YourResearchGuide" in html
+    assert "ResearchAgent" in html
     assert "Saved conversations" in html
     assert "Agent launchpads" in html
+    assert 'id="modelChoice"' in html
+    assert "model: selectedModel()" in html
     assert "localStorage" in html
     assert "STORAGE_KEY" in html
-    assert "yourresearchguide.conversations.v1" in html
+    assert "researchagent.conversations.v1" in html
     assert "memory: memoryContext()" in html
     assert 'href="/favicon.ico"' in html
-    assert 'id=\"agentRunning\"' in html
-    assert 'agent-running-logo' in html
-    assert 'setAgentRunning(true)' in html
-    assert 'setAgentRunning(false)' in html
+    assert 'id="agentRunning"' in html
+    assert "agent-running-logo" in html
+    assert "setAgentRunning(true)" in html
+    assert "setAgentRunning(false)" in html
     assert ".conversation-list { display: grid; gap: 10px; overflow-y: auto;" in html
     assert ".suggestions { display: grid; gap: 12px; overflow-y: auto;" in html
 
@@ -36,7 +42,9 @@ def test_home_page_script_escapes_newline_sequences_for_browser_parsing() -> Non
 
 
 def test_memory_augmented_prompt_includes_memory_and_latest_request() -> None:
-    prompt = format_memory_augmented_prompt("What should I read next?", "User: Topic A\nAgent: Read Paper B")
+    prompt = format_memory_augmented_prompt(
+        "What should I read next?", "User: Topic A\nAgent: Read Paper B"
+    )
 
     assert "Saved conversation memory:" in prompt
     assert "User: Topic A" in prompt
@@ -53,7 +61,9 @@ def test_favicon_route_returns_svg_icon() -> None:
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     try:
-        conn = http.client.HTTPConnection(server.server_address[0], server.server_address[1], timeout=2)
+        conn = http.client.HTTPConnection(
+            server.server_address[0], server.server_address[1], timeout=2
+        )
         conn.request("GET", "/favicon.ico")
         response = conn.getresponse()
         body = response.read().decode("utf-8")

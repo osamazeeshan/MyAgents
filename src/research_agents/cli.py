@@ -55,7 +55,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--web",
         action="store_true",
-        help="Launch YourResearchGuide, the web interface for the research agents.",
+        help="Launch ResearchAgent, the web interface for the research agents.",
     )
     parser.add_argument(
         "--web-host",
@@ -71,7 +71,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--open-browser",
         action="store_true",
-        help="Open YourResearchGuide in the default browser when using --web.",
+        help="Open ResearchAgent in the default browser when using --web.",
     )
     parser.add_argument(
         "--conference-review",
