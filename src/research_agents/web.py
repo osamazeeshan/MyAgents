@@ -259,10 +259,10 @@ def build_home_page() -> str:
     .code-interface-button.visible {{ display: inline-flex; align-items: center; justify-content: center; }}
     .code-interface {{ position: fixed; inset: 14px; z-index: 20; display: none; grid-template-rows: auto 1fr; border: 1px solid var(--border); border-radius: 24px; background: rgba(7,8,23,.96); box-shadow: var(--shadow); overflow: hidden; backdrop-filter: blur(22px); }}
     .code-interface.visible {{ display: grid; }}
-    .code-interface-header {{ display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 14px 16px; border-bottom: 1px solid var(--border); background: rgba(31,37,75,.72); }}
+    .code-interface-header {{ display: grid; grid-template-columns: minmax(180px, auto) minmax(0, 1fr); align-items: center; gap: 14px; padding: 14px 16px; border-bottom: 1px solid var(--border); background: rgba(31,37,75,.72); }}
     .code-interface-header h2 {{ margin: 0; font-size: 18px; letter-spacing: -.02em; }}
     .code-interface-header span {{ color: var(--muted); font-size: 12px; }}
-    .code-interface-actions {{ display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }}
+    .code-interface-actions {{ display: grid; grid-auto-flow: column; grid-auto-columns: max-content; gap: 8px; justify-content: end; overflow-x: auto; white-space: nowrap; }}
     .code-interface-body {{ display: grid; grid-template-columns: minmax(220px, 300px) minmax(0, 1fr); min-height: 0; }}
     .file-tree-panel {{ border-right: 1px solid var(--border); padding: 14px; min-height: 0; overflow: auto; background: rgba(3,6,20,.38); }}
     .file-tree-panel h3, .editor-panel h3 {{ margin: 0 0 10px; font-size: 12px; color: var(--accent); letter-spacing: .08em; text-transform: uppercase; }}
@@ -287,6 +287,8 @@ def build_home_page() -> str:
       .primary, .secondary, .memory-pill {{ width: auto; min-width: 0; }}
       .primary, .secondary {{ flex-basis: auto; }}
       .memory-pill {{ margin-left: 0; }}
+      .code-interface-header {{ grid-template-columns: 1fr; }}
+      .code-interface-actions {{ justify-content: start; }}
       .code-interface-body {{ grid-template-columns: 1fr; }}
       .file-tree-panel {{ border-right: 0; border-bottom: 1px solid var(--border); max-height: 220px; }}
     }}

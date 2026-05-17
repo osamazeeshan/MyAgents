@@ -138,6 +138,7 @@ def test_home_page_includes_generated_code_interface_controls() -> None:
     assert 'id="linkGithub"' in html
     assert 'id="createPullRequest"' in html
     assert 'id="viewPullRequest"' in html
+    assert ".code-interface-actions { display: grid; grid-auto-flow: column; grid-auto-columns: max-content; gap: 8px; justify-content: end; overflow-x: auto; white-space: nowrap; }" in html
     assert 'publishWorkspaceToGithub' in html
     assert 'linkWorkspaceToGithub' in html
     assert 'createWorkspacePullRequest' in html
