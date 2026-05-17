@@ -60,6 +60,12 @@ AGENT_SUGGESTIONS = [
         "role": "Discovers recent top-conference topics, verifies papers, and runs two reviewers.",
         "try": "LLM agents, multimodal models, and computer vision",
     },
+    {
+        "name": "Paper Coding Agent",
+        "role": "Plans an implementation from a paper ID or title and proposes LLM-generated experiment ideas.",
+        "try": "Implement arXiv:1706.03762 and suggest two extension experiments.",
+        "mode": "coding",
+    },
 ]
 
 
@@ -196,7 +202,7 @@ def build_home_page() -> str:
     }}
     .output .empty {{ color: var(--muted); }}
     .composer {{ border: 1px solid var(--border); background: rgba(3, 6, 20, .52); border-radius: 22px; padding: 14px; }}
-    .modebar {{ display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 7px; margin-bottom: 12px; }}
+    .modebar {{ display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 7px; margin-bottom: 12px; }}
     .mode {{ border: 1px solid var(--border); border-radius: 999px; padding: 7px 8px; color: var(--muted); background: transparent; cursor: pointer; font-size: 12px; line-height: 1.15; white-space: nowrap; }}
     .mode.active {{ color: #06120f; background: var(--accent); border-color: var(--accent); font-weight: 800; }}
     textarea, input {{
@@ -229,6 +235,12 @@ def build_home_page() -> str:
     @keyframes agentPulse {{ 0%, 100% {{ transform: scale(.92) rotate(0deg); opacity: .72; }} 50% {{ transform: scale(1.08) rotate(8deg); opacity: 1; }} }}
     .conference-fields {{ display: none; gap: 10px; margin-bottom: 12px; }}
     .conference-fields.visible {{ display: grid; grid-template-columns: 1fr; }}
+    .coding-window {{ display: none; gap: 10px; margin-bottom: 12px; border: 1px solid rgba(124,247,212,.32); border-radius: 20px; padding: 14px; background: rgba(124,247,212,.06); }}
+    .coding-window.visible {{ display: grid; grid-template-columns: 1fr; }}
+    .coding-window-header {{ display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }}
+    .coding-window h3 {{ margin: 3px 0 0; color: var(--text); text-transform: none; letter-spacing: -.02em; font-size: 16px; }}
+    .coding-window .eyebrow, #codingState {{ color: var(--accent); font-size: 11px; font-weight: 800; letter-spacing: .09em; text-transform: uppercase; }}
+    #codingState {{ color: var(--muted); text-align: right; }}
     details {{ margin-top: 16px; color: var(--muted); flex: 0 0 auto; }}
     pre {{ overflow: auto; background: rgba(0,0,0,.3); padding: 12px; border-radius: 12px; }}
     @media (max-width: 1180px) {{
@@ -282,6 +294,19 @@ def build_home_page() -> str:
             <button class="mode" data-mode="discover">Discover conference topics</button>
             <button class="mode" data-mode="review">Review selected topic</button>
             <button class="mode" data-mode="followup">Conference follow-up</button>
+            <button class="mode" data-mode="coding">Paper coding agent</button>
+          </div>
+          <div class="coding-window" id="codingWindow" aria-hidden="true">
+            <div class="coding-window-header">
+              <div>
+                <span class="eyebrow">Coding workspace</span>
+                <h3>Paper implementation lab</h3>
+              </div>
+              <span id="codingState">Hidden until coding mode</span>
+            </div>
+            <input id="paperIdentifier" placeholder="Paper ID or title (for example arXiv:1706.03762 or Attention Is All You Need)" />
+            <textarea id="codingGoal" placeholder="Implementation goal, target framework, repo constraints, or dataset details."></textarea>
+            <textarea id="ideaStream" placeholder="Optional: LLM idea prompts, variants to try, ablations, metrics, or links to explore."></textarea>
           </div>
           <div class="conference-fields" id="conferenceFields">
             <input id="topic" placeholder="Selected topic (required for review/follow-up)" />
@@ -309,14 +334,14 @@ def build_home_page() -> str:
     const STORAGE_KEY = 'researchagent.conversations.v1';
     const LEGACY_STORAGE_KEY = 'yourresearchguide.conversations.v1';
     const ANCIENT_STORAGE_KEY = 'agentarium.conversations.v1';
-    const state = {{ mode: 'research', lastDiscovery: '', lastPaperContext: '', lastReview: '', conversations: [], currentId: '' }};
+    const state = {{ mode: 'research', lastDiscovery: '', lastPaperContext: '', lastReview: '', lastCoding: '', conversations: [], currentId: '' }};
     const $ = (id) => document.getElementById(id);
     const output = $('output');
 
     function nowLabel(iso) {{ return new Date(iso).toLocaleString([], {{ dateStyle: 'medium', timeStyle: 'short' }}); }}
     function newConversation() {{
       const createdAt = new Date().toISOString();
-      return {{ id: String(Date.now()), title: 'New research chat', createdAt, updatedAt: createdAt, messages: [], lastDiscovery: '', lastPaperContext: '', lastReview: '' }};
+      return {{ id: String(Date.now()), title: 'New research chat', createdAt, updatedAt: createdAt, messages: [], lastDiscovery: '', lastPaperContext: '', lastReview: '', lastCoding: '' }};
     }}
     function loadConversations() {{
       const stored = localStorage.getItem(STORAGE_KEY) || localStorage.getItem(LEGACY_STORAGE_KEY) || localStorage.getItem(ANCIENT_STORAGE_KEY) || '[]';
@@ -336,6 +361,7 @@ def build_home_page() -> str:
       state.lastDiscovery = chat.lastDiscovery || '';
       state.lastPaperContext = chat.lastPaperContext || '';
       state.lastReview = chat.lastReview || '';
+      state.lastCoding = chat.lastCoding || '';
       $('context').value = state.lastReview || state.lastPaperContext || state.lastDiscovery || '';
       setOutput(renderTranscript(chat));
       updateMemorySummary();
@@ -393,24 +419,33 @@ def build_home_page() -> str:
       if (!res.ok) throw new Error(data.error || res.statusText);
       return data;
     }}
-    document.querySelectorAll('.mode').forEach(btn => btn.addEventListener('click', () => {{
-      document.querySelectorAll('.mode').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      state.mode = btn.dataset.mode;
-      $('conferenceFields').classList.toggle('visible', state.mode !== 'research' && state.mode !== 'discover');
-      $('prompt').placeholder = state.mode === 'discover' ? 'Describe the domain to scan across recent top conferences…' : 'Ask a research question, describe a topic, or paste a follow-up…';
-    }}));
-    document.querySelectorAll('.suggestion').forEach(btn => btn.addEventListener('click', () => {{ $('prompt').value = btn.dataset.prompt; $('prompt').focus(); }}));
+    function activateMode(mode) {{
+      const targetMode = mode || 'research';
+      document.querySelectorAll('.mode').forEach(b => b.classList.toggle('active', b.dataset.mode === targetMode));
+      state.mode = targetMode;
+      $('conferenceFields').classList.toggle('visible', state.mode !== 'research' && state.mode !== 'discover' && state.mode !== 'coding');
+      $('codingWindow').classList.toggle('visible', state.mode === 'coding');
+      $('codingWindow').setAttribute('aria-hidden', state.mode === 'coding' ? 'false' : 'true');
+      $('codingState').textContent = state.mode === 'coding' ? 'Ready for coding' : 'Hidden until coding mode';
+      $('prompt').placeholder = state.mode === 'discover' ? 'Describe the domain to scan across recent top conferences…' : state.mode === 'coding' ? 'Ask for implementation steps, code structure, ablations, or new LLM-generated ideas…' : 'Ask a research question, describe a topic, or paste a follow-up…';
+    }}
+    document.querySelectorAll('.mode').forEach(btn => btn.addEventListener('click', () => activateMode(btn.dataset.mode)));
+    document.querySelectorAll('.suggestion').forEach(btn => btn.addEventListener('click', () => {{ activateMode(btn.dataset.mode); $('prompt').value = btn.dataset.prompt; $('prompt').focus(); }}));
     $('newChat').addEventListener('click', () => {{ const chat = newConversation(); state.conversations.unshift(chat); state.currentId = chat.id; saveConversations(); hydrateCurrent(); }});
     $('deleteChat').addEventListener('click', () => {{ state.conversations = state.conversations.filter(c => c.id !== state.currentId); if (!state.conversations.length) state.conversations = [newConversation()]; state.currentId = state.conversations[0].id; saveConversations(); hydrateCurrent(); }});
     $('restore').addEventListener('click', hydrateCurrent);
-    $('clear').addEventListener('click', () => {{ $('prompt').value = ''; $('topic').value = ''; }});
+    $('clear').addEventListener('click', () => {{ $('prompt').value = ''; $('topic').value = ''; $('paperIdentifier').value = ''; $('codingGoal').value = ''; $('ideaStream').value = ''; }});
     $('run').addEventListener('click', async () => {{
       const prompt = $('prompt').value.trim();
-      if (!prompt && state.mode !== 'discover') {{ setOutput('Please enter a prompt before running agents.'); return; }}
+      if (!prompt && state.mode !== 'discover' && state.mode !== 'coding') {{ setOutput('Please enter a prompt before running agents.'); return; }}
       const topic = $('topic').value.trim();
       const context = $('context').value.trim() || state.lastReview || state.lastPaperContext || state.lastDiscovery;
-      remember('user', prompt || 'Discover recent conference topics');
+      const paperIdentifier = $('paperIdentifier').value.trim() || prompt;
+      const codingGoal = $('codingGoal').value.trim();
+      const ideaStream = $('ideaStream').value.trim();
+      if (state.mode === 'coding' && !paperIdentifier) {{ setOutput('Please enter a paper ID or title before running the coding agent.'); return; }}
+      const userLabel = state.mode === 'coding' ? ('Code paper: ' + paperIdentifier + (codingGoal ? '\n' + codingGoal : '')) : (prompt || 'Discover recent conference topics');
+      remember('user', userLabel);
       setOutput(renderTranscript(currentConversation()) + '\\n\\nAgent is thinking…');
       setAgentRunning(true); $('run').disabled = true;
       try {{
@@ -421,12 +456,16 @@ def build_home_page() -> str:
         }} else if (state.mode === 'review') {{
           const data = await postJSON('/api/conference/review', {{ topic: topic || prompt, discovery_context: context, memory: memoryContext(), model: selectedModel() }});
           state.lastPaperContext = data.paper_context; state.lastReview = data.review; const chat = currentConversation(); chat.lastPaperContext = data.paper_context; chat.lastReview = data.review; $('context').value = data.paper_context + '\\n\\n' + data.review; remember('agent', data.paper_context + '\\n\\n' + data.review); setOutput(renderTranscript(currentConversation()));
+        }} else if (state.mode === 'coding') {{
+          $('codingState').textContent = 'Coding agent running…';
+          const data = await postJSON('/api/coding/implement', {{ paper: paperIdentifier, goal: codingGoal || prompt, ideas: ideaStream, memory: memoryContext(), model: selectedModel() }});
+          state.lastCoding = data.output; const chat = currentConversation(); chat.lastCoding = data.output; remember('agent', data.output); setOutput(renderTranscript(currentConversation()));
         }} else {{
           const data = await postJSON('/api/conference/follow-up', {{ question: prompt, selected_topic: topic, paper_context: state.lastPaperContext || context, review_context: state.lastReview || context, memory: memoryContext(), model: selectedModel() }});
           remember('agent', data.output); appendOutput('Follow-up: ' + prompt, data.output);
         }}
       }} catch (err) {{ const message = 'Error: ' + err.message; remember('agent', message); setOutput(renderTranscript(currentConversation())); }}
-      finally {{ setAgentRunning(false); $('run').disabled = false; $('prompt').value = ''; }}
+      finally {{ setAgentRunning(false); $('run').disabled = false; if (state.mode === 'coding') $('codingState').textContent = 'Ready for coding'; $('prompt').value = ''; }}
     }});
     $('modelChoice').addEventListener('change', () => {{ $('model').textContent = $('modelChoice').selectedOptions[0].textContent.split(' · ').pop(); }});
     loadConversations();
@@ -552,6 +591,18 @@ async def _handle_api_request(path: str, payload: dict[str, Any]) -> dict[str, A
                 _require_text(payload, "review_context"),
                 _optional_text(payload, "memory"),
             ),
+        )
+        return {"output": output}
+
+    if path == "/api/coding/implement":
+        from .workflow import run_paper_coding_agent
+
+        output = await run_paper_coding_agent(
+            paper_identifier=_require_text(payload, "paper"),
+            implementation_goal=format_memory_augmented_prompt(
+                _optional_text(payload, "goal"), _optional_text(payload, "memory")
+            ),
+            idea_context=_optional_text(payload, "ideas"),
         )
         return {"output": output}
 
