@@ -124,3 +124,69 @@ def test_home_page_includes_paper_coding_workspace() -> None:
     assert "/api/coding/implement" in html
     assert "state.mode === 'coding'" in html
     assert "codingWindow').classList.toggle('visible'" in html
+
+
+def test_home_page_includes_generated_code_interface_controls() -> None:
+    html = build_home_page()
+
+    assert 'id="openCodeInterface"' in html
+    assert 'id="codeInterface"' in html
+    assert 'id="fileTree"' in html
+    assert 'id="codeEditor"' in html
+    assert 'id="runDummy"' in html
+    assert '/api/coding/files' in html
+    assert '/api/coding/file' in html
+    assert '/api/coding/save' in html
+    assert '/api/coding/run' in html
+    assert 'state.currentWorkspace = data.workspace' in html
+
+
+def test_coding_workspace_file_api_reads_saves_and_runs_dummy_data(tmp_path, monkeypatch) -> None:
+    import asyncio
+    import research_agents.workflow as workflow
+    from research_agents.web import handle_api_request
+
+    monkeypatch.chdir(tmp_path)
+    workspace_text = workflow.prepare_paper_coding_environment("Interface Smoke")
+    workspace = re.search(r"Created local workspace: (.+)", workspace_text).group(1)
+
+    tree_result = asyncio.run(
+        handle_api_request("/api/coding/files", {"workspace": workspace})
+    )
+    assert tree_result["workspace"].endswith("Interface-Smoke-coding-lab")
+    assert any(node["name"] == "src" for node in tree_result["tree"])
+
+    file_result = asyncio.run(
+        handle_api_request(
+            "/api/coding/file",
+            {"workspace": workspace, "path": "src/reproduction_baseline/baseline.py"},
+        )
+    )
+    assert "def majority_label" in file_result["content"]
+
+    edited = file_result["content"] + "\n# browser edit\n"
+    save_result = asyncio.run(
+        handle_api_request(
+            "/api/coding/save",
+            {
+                "workspace": workspace,
+                "path": "src/reproduction_baseline/baseline.py",
+                "content": edited,
+            },
+        )
+    )
+    assert save_result["saved"] is True
+    assert "# browser edit" in (
+        tmp_path
+        / "reproduction_repos"
+        / "Interface-Smoke-coding-lab"
+        / "src"
+        / "reproduction_baseline"
+        / "baseline.py"
+    ).read_text(encoding="utf-8")
+
+    run_result = asyncio.run(
+        handle_api_request("/api/coding/run", {"workspace": workspace})
+    )
+    assert run_result["returncode"] == 0
+    assert "DatasetSummary" in run_result["output"]
