@@ -38,9 +38,11 @@ def test_home_page_contains_persistent_memory_layout() -> None:
     assert ".workspace.card { background: transparent; border-color: transparent; box-shadow: none; backdrop-filter: none; padding: 0; }" in html
     assert ".modebar { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 7px; margin-bottom: 12px; }" in html
     assert "font-size: 12px; line-height: 1.15; white-space: nowrap;" in html
-    assert ".actions { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; align-items: stretch; margin-top: 12px; }" in html
+    assert ".actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: stretch; margin-top: 12px; }" in html
     assert ".primary, .secondary, .memory-pill { min-height: 42px; border-radius: 16px; padding: 10px 12px; font-size: 13px; line-height: 1.15; font-weight: 800; display: inline-flex; align-items: center; justify-content: center; text-align: center; white-space: nowrap; }" in html
-    assert ".agent-running.visible { display: inline-flex; grid-column: 1 / -1; justify-content: center; }" in html
+    assert ".primary, .secondary { width: 112px; flex: 0 0 112px; cursor: pointer; }" in html
+    assert ".memory-pill { color: var(--accent); border: 1px solid rgba(124,247,212,.4); margin-left: auto; min-width: 170px; }" in html
+    assert ".agent-running.visible { display: inline-flex; flex-basis: 100%; justify-content: center; }" in html
     assert "Choose a model before running agents. Local presets use your configured OpenAI-compatible provider." in html
     assert 'id="provider"' not in html
     assert 'id="notes"' not in html
