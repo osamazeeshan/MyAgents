@@ -22,6 +22,12 @@ DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8765
 MAX_BODY_BYTES = 1_000_000
 MAX_MEMORY_CHARS = 12_000
+FAVICON_SVG = """<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 64 64\">
+  <rect width=\"64\" height=\"64\" rx=\"16\" fill=\"#070817\"/>
+  <circle cx=\"22\" cy=\"24\" r=\"10\" fill=\"#7cf7d4\"/>
+  <path d=\"M16 44c8-15 24-15 32 0\" fill=\"none\" stroke=\"#b58cff\" stroke-width=\"7\" stroke-linecap=\"round\"/>
+  <path d=\"M36 18h12v12\" fill=\"none\" stroke=\"#ff80c5\" stroke-width=\"6\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>
+</svg>"""
 
 AGENT_SUGGESTIONS = [
     {
@@ -72,6 +78,7 @@ def build_home_page() -> str:
   <meta charset=\"utf-8\" />
   <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />
   <title>{APP_NAME} · Research Agents</title>
+  <link rel="icon" href="/favicon.ico" type="image/svg+xml" />
   <style>
     :root {{
       color-scheme: dark;
@@ -132,7 +139,7 @@ def build_home_page() -> str:
     h3 {{ margin: 16px 0 10px; font-size: 15px; color: var(--accent); text-transform: uppercase; letter-spacing: .1em; }}
     .memory-panel, .launchpad-panel {{ display: flex; flex-direction: column; overflow: hidden; }}
     .panel-actions {{ display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; }}
-    .conversation-list {{ display: grid; gap: 10px; overflow: visible; }}
+    .conversation-list {{ display: grid; gap: 10px; overflow-y: auto; overflow-x: hidden; flex: 1 1 auto; min-height: 0; padding-right: 4px; }}
     .conversation {{
       text-align: left; border: 1px solid var(--border); border-radius: 16px; padding: 12px;
       color: var(--text); background: rgba(255,255,255,.055); cursor: pointer; transition: .2s ease;
@@ -142,7 +149,7 @@ def build_home_page() -> str:
     .conversation strong {{ white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }}
     .conversation span {{ color: var(--muted); font-size: 12px; margin-top: 5px; }}
     .memory-summary {{ color: var(--muted); font-size: 13px; line-height: 1.45; border-top: 1px solid var(--border); margin-top: 14px; padding-top: 14px; }}
-    .suggestions {{ display: grid; gap: 12px; overflow: visible; }}
+    .suggestions {{ display: grid; gap: 12px; overflow-y: auto; overflow-x: hidden; flex: 1 1 auto; min-height: 0; padding-right: 4px; }}
     .suggestion {{
       text-align: left; border: 1px solid var(--border); border-radius: 18px; padding: 14px;
       color: var(--text); background: rgba(255,255,255,.055); cursor: pointer; transition: .2s ease;
@@ -175,7 +182,7 @@ def build_home_page() -> str:
     .memory-pill {{ color: var(--accent); border: 1px solid rgba(124,247,212,.4); border-radius: 999px; padding: 8px 11px; margin-left: auto; }}
     .conference-fields {{ display: none; gap: 10px; margin-bottom: 12px; }}
     .conference-fields.visible {{ display: grid; grid-template-columns: 1fr; }}
-    details {{ margin-top: 16px; color: var(--muted); }}
+    details {{ margin-top: 16px; color: var(--muted); flex: 0 0 auto; }}
     pre {{ overflow: auto; background: rgba(0,0,0,.3); padding: 12px; border-radius: 12px; }}
     @media (max-width: 1180px) {{
       body {{ overflow: auto; }}
@@ -375,6 +382,15 @@ def _json_response(handler: BaseHTTPRequestHandler, status: HTTPStatus, payload:
     handler.wfile.write(body)
 
 
+def _asset_response(handler: BaseHTTPRequestHandler, body: bytes, content_type: str) -> None:
+    handler.send_response(HTTPStatus.OK)
+    handler.send_header("Content-Type", content_type)
+    handler.send_header("Content-Length", str(len(body)))
+    handler.send_header("Cache-Control", "public, max-age=86400")
+    handler.end_headers()
+    handler.wfile.write(body)
+
+
 def _html_response(handler: BaseHTTPRequestHandler, body: str) -> None:
     encoded = body.encode("utf-8")
     handler.send_response(HTTPStatus.OK)
@@ -476,6 +492,9 @@ class YourResearchGuideRequestHandler(BaseHTTPRequestHandler):
         path = urlparse(self.path).path
         if path in {"/", "/index.html"}:
             _html_response(self, build_home_page())
+            return
+        if path in {"/favicon.ico", "/favicon.svg"}:
+            _asset_response(self, FAVICON_SVG.encode("utf-8"), "image/svg+xml; charset=utf-8")
             return
         if path == "/api/health":
             settings = load_settings()
