@@ -182,6 +182,98 @@ def test_prepare_reproduction_repository_creates_scaffold(tmp_path, monkeypatch)
     )
 
 
+
+
+def test_create_github_repository_delegates_to_plugin(monkeypatch) -> None:
+    import research_agents.workflow as workflow
+
+    calls: list[tuple[str, str, bool, str]] = []
+
+    def fake_plugin(repo_name: str, description: str, private: bool, owner: str) -> str:
+        calls.append((repo_name, description, private, owner))
+        return "https://github.com/example/plugin-created"
+
+    monkeypatch.setattr(workflow, "_create_github_repository_with_plugin", fake_plugin)
+
+    result = workflow.create_github_repository(
+        "Plugin Created Repo!",
+        description="desc",
+        private=True,
+        owner="example",
+    )
+
+    assert result == "https://github.com/example/plugin-created"
+    assert calls == [("Plugin-Created-Repo", "desc", True, "example")]
+
+
+def test_github_repo_creator_plugin_manifest_and_marketplace() -> None:
+    import json
+    from pathlib import Path
+
+    manifest = json.loads(
+        Path("plugins/github-repo-creator/.codex-plugin/plugin.json").read_text(encoding="utf-8")
+    )
+    marketplace = json.loads(Path(".agents/plugins/marketplace.json").read_text(encoding="utf-8"))
+
+    assert manifest["name"] == "github-repo-creator"
+    assert manifest["skills"] == "./skills/"
+    assert "login" in manifest["interface"]["longDescription"].lower()
+    assert marketplace["plugins"][0]["name"] == "github-repo-creator"
+    assert marketplace["plugins"][0]["policy"]["authentication"] == "ON_USE"
+
+
+def test_prepare_reproduction_repository_scaffold_includes_dummy_code_and_tests(tmp_path, monkeypatch) -> None:
+    import research_agents.workflow as workflow
+
+    monkeypatch.setattr(workflow, "REPRODUCTION_REPOS_DIR", tmp_path)
+
+    workflow.prepare_reproduction_repository("Smoke Test Repo")
+
+    repo_path = tmp_path / "Smoke-Test-Repo"
+    assert (repo_path / "data" / "dummy_dataset.csv").exists()
+    assert (repo_path / "src" / "reproduction_baseline" / "baseline.py").exists()
+    assert (repo_path / "tests" / "test_baseline.py").exists()
+    assert (repo_path / ".git").is_dir()
+
+
+def test_prepare_reproduction_repository_can_create_github_remote(tmp_path, monkeypatch) -> None:
+    import research_agents.workflow as workflow
+
+    calls: list[dict[str, object]] = []
+
+    def fake_create_github_repo(repo_name: str, **kwargs: object) -> str:
+        calls.append({"repo_name": repo_name, **kwargs})
+        return "https://github.com/example/smoke-test-repo"
+
+    monkeypatch.setattr(workflow, "REPRODUCTION_REPOS_DIR", tmp_path)
+
+    result = workflow.prepare_reproduction_repository(
+        "Smoke Test Repo",
+        github_repo="smoke-test-repo",
+        github_private=True,
+        github_owner="example-org",
+        github_create_func=fake_create_github_repo,
+    )
+
+    repo_path = tmp_path / "Smoke-Test-Repo"
+    assert calls == [
+        {
+            "repo_name": "smoke-test-repo",
+            "description": "Research reproduction workspace for Smoke Test Repo",
+            "private": True,
+            "owner": "example-org",
+        }
+    ]
+    assert "Created GitHub repository https://github.com/example/smoke-test-repo" in result
+    remotes = __import__("subprocess").run(
+        ["git", "remote", "get-url", "origin"],
+        cwd=repo_path,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    assert remotes == "https://github.com/example/smoke-test-repo"
+
 def test_interactive_conference_review_supports_paper_to_repo_path(monkeypatch, tmp_path) -> None:
     import asyncio
     import research_agents.workflow as workflow
@@ -248,6 +340,7 @@ def test_interactive_conference_review_supports_paper_to_repo_path(monkeypatch, 
             "",
             "https://example.com/dataset",
             "paper-a-repro",
+            "",
             "yes",
             "",
         ]
