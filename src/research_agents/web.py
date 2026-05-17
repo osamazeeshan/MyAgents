@@ -108,8 +108,8 @@ def build_home_page() -> str:
     }}
     button, textarea, input {{ font: inherit; }}
     button:disabled {{ opacity: .6; cursor: wait; }}
-    .shell {{ width: min(1440px, calc(100vw - 28px)); height: 100vh; margin: 0 auto; padding: 22px 0; display: flex; flex-direction: column; gap: 18px; }}
-    header {{ display: grid; grid-template-columns: 1fr auto; gap: 18px; align-items: stretch; flex: 0 0 auto; }}
+    .shell {{ width: min(1440px, calc(100vw - 28px)); height: 100vh; margin: 0 auto; padding: 16px 0; display: flex; flex-direction: column; gap: 14px; }}
+    header {{ display: grid; grid-template-columns: 1fr auto; gap: 14px; align-items: stretch; flex: 0 0 auto; }}
     .hero, .card {{
       border: 1px solid var(--border);
       background: var(--panel);
@@ -117,22 +117,18 @@ def build_home_page() -> str:
       border-radius: 26px;
       box-shadow: var(--shadow);
     }}
-    .hero {{ padding: 24px 28px; position: relative; overflow: hidden; }}
+    .hero {{ padding: 14px 20px; position: relative; overflow: hidden; }}
     .hero::after {{
-      content: \"\"; position: absolute; inset: auto -10% -70% 42%; height: 220px;
+      content: \"\"; position: absolute; inset: auto -10% -110% 42%; height: 180px;
       background: linear-gradient(90deg, transparent, rgba(124,247,212,.28), transparent);
       transform: rotate(-8deg); filter: blur(20px);
     }}
-    .eyebrow {{ color: var(--accent); letter-spacing: .18em; text-transform: uppercase; font-size: 12px; font-weight: 800; }}
-    h1 {{ font-size: clamp(36px, 5vw, 68px); line-height: .9; margin: 10px 0; letter-spacing: -.07em; }}
-    .tagline {{ color: var(--muted); font-size: 17px; line-height: 1.45; max-width: 860px; margin: 0; }}
-    .name-note {{ margin: 12px 0 0; color: #d9e1ff; }}
-    .name-note strong {{ color: var(--accent); }}
-    .status {{ padding: 18px; display: grid; grid-template-columns: repeat(3, minmax(110px, 1fr)); gap: 10px; min-width: 420px; }}
-    .status h2 {{ grid-column: 1 / -1; margin-bottom: 0; }}
-    .pill {{ display: grid; gap: 4px; color: var(--muted); border: 1px solid var(--border); border-radius: 16px; padding: 10px; min-width: 0; }}
+    h1 {{ font-size: clamp(30px, 4vw, 48px); line-height: .95; margin: 0 0 4px; letter-spacing: -.06em; }}
+    .tagline {{ color: var(--muted); font-size: 15px; line-height: 1.3; max-width: 860px; margin: 0; }}
+    .status {{ padding: 12px; display: grid; grid-template-columns: repeat(3, minmax(105px, 1fr)); gap: 8px; min-width: 390px; align-content: center; }}
+    .pill {{ display: grid; gap: 2px; color: var(--muted); border: 1px solid var(--border); border-radius: 14px; padding: 8px 10px; min-width: 0; }}
     .pill b {{ color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }}
-    .status .hint {{ grid-column: 1 / -1; }}
+    .status .hint {{ grid-column: 1 / -1; line-height: 1.25; }}
     main {{ flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: 300px minmax(0, 1fr) 330px; gap: 18px; }}
     .card {{ padding: 18px; min-height: 0; }}
     h2 {{ margin: 0 0 12px; font-size: 20px; }}
@@ -198,13 +194,10 @@ def build_home_page() -> str:
   <div class=\"shell\">
     <header>
       <section class=\"hero\">
-        <div class=\"eyebrow\">Persistent agent workspace</div>
         <h1>{APP_NAME}</h1>
         <p class=\"tagline\">{APP_TAGLINE}</p>
-        <p class=\"name-note\"><strong>Built-in memory:</strong> YourResearchGuide saves every user prompt and agent answer in your browser, restores the latest chat, and sends recent context with new research requests.</p>
       </section>
       <aside class=\"card status\" id=\"status\">
-        <h2>Runtime</h2>
         <div class=\"pill\"><span>Provider</span><b id=\"provider\">loading…</b></div>
         <div class=\"pill\"><span>Model</span><b id=\"model\">loading…</b></div>
         <div class=\"pill\"><span>Notes</span><b id=\"notes\">loading…</b></div>
