@@ -135,15 +135,18 @@ def test_home_page_includes_generated_code_interface_controls() -> None:
     assert 'id="codeEditor"' in html
     assert 'id="runDummy"' in html
     assert 'id="publishGithub"' in html
+    assert 'id="linkGithub"' in html
     assert 'id="createPullRequest"' in html
     assert 'id="viewPullRequest"' in html
     assert 'publishWorkspaceToGithub' in html
+    assert 'linkWorkspaceToGithub' in html
     assert 'createWorkspacePullRequest' in html
     assert '/api/coding/files' in html
     assert '/api/coding/file' in html
     assert '/api/coding/save' in html
     assert '/api/coding/run' in html
     assert '/api/coding/publish' in html
+    assert '/api/coding/link' in html
     assert '/api/coding/create-pr' in html
     assert 'state.currentWorkspace = data.workspace' in html
 
@@ -197,6 +200,68 @@ def test_coding_workspace_file_api_reads_saves_and_runs_dummy_data(tmp_path, mon
     )
     assert run_result["returncode"] == 0
     assert "DatasetSummary" in run_result["output"]
+
+
+def test_coding_workspace_link_api_enables_manual_github_connection(tmp_path, monkeypatch) -> None:
+    import asyncio
+    import subprocess
+    import research_agents.workflow as workflow
+    from research_agents.web import handle_api_request
+
+    monkeypatch.chdir(tmp_path)
+    workspace_text = workflow.prepare_paper_coding_environment("Manual Link Smoke")
+    workspace = re.search(r"Created local workspace: (.+)", workspace_text).group(1)
+    bare_repo = tmp_path / "manual-link.git"
+    subprocess.run(["git", "init", "--bare", str(bare_repo)], check=True)
+
+    link_result = asyncio.run(
+        handle_api_request(
+            "/api/coding/link",
+            {"workspace": workspace, "repo_url": str(bare_repo) + ".git"},
+        )
+    )
+
+    assert link_result["linked"] is True
+    assert link_result["create_pr_enabled"] is True
+    assert link_result["html_url"] == str(bare_repo)
+    assert link_result["remote_name"] == "origin"
+    remote_url = subprocess.run(
+        ["git", "remote", "get-url", "origin"],
+        cwd=Path(workspace),
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    assert remote_url == str(bare_repo)
+
+
+def test_coding_workspace_publish_failure_points_to_link_button(tmp_path, monkeypatch) -> None:
+    import asyncio
+    import research_agents.workflow as workflow
+    from research_agents.web import handle_api_request
+
+    monkeypatch.chdir(tmp_path)
+    workspace_text = workflow.prepare_paper_coding_environment("Publish Failure")
+    workspace = re.search(r"Created local workspace: (.+)", workspace_text).group(1)
+
+    def fake_create_github_repository(*args: object, **kwargs: object) -> str:
+        raise RuntimeError("GitHub repository creation plugin failed.")
+
+    monkeypatch.setattr(
+        workflow, "create_github_repository", fake_create_github_repository
+    )
+
+    publish_result = asyncio.run(
+        handle_api_request(
+            "/api/coding/publish",
+            {"workspace": workspace, "repo": "publish-failure", "private": True},
+        )
+    )
+
+    assert publish_result["published"] is False
+    assert publish_result["create_pr_enabled"] is False
+    assert "Link GitHub" in publish_result["message"]
+    assert "Link GitHub" in publish_result["manual_link_hint"]
 
 
 def test_coding_workspace_publish_api_creates_remote_and_pushes(tmp_path, monkeypatch) -> None:
