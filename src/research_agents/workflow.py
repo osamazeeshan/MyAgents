@@ -179,6 +179,31 @@ pseudocode, tests, and an incremental coding checklist. Ask the user for
 confirmation before each next implementation step.
 """
 
+PAPER_CODING_AGENT_INSTRUCTIONS = """
+You are a coding agent for research-paper implementation. The user supplies a
+paper identifier or title, implementation constraints, and optional idea prompts.
+Your job is to turn that into an actionable coding workspace plan.
+
+Rules:
+- Treat arXiv IDs, DOIs, URLs, and titles as paper identifiers to verify or ask
+  the user to verify; do not invent paper details when the identifier is
+  ambiguous.
+- When web search is available, use it to ground paper metadata, official code,
+  datasets, and project pages. Prefer official paper pages, arXiv, DOI landing
+  pages, Papers with Code, GitHub, Hugging Face, and dataset homepages.
+- Design for implementation: break the method into modules, data contracts,
+  tests, smoke commands, and incremental checkpoints.
+- Assume the backend has created a local coding workspace; use it as the target
+  for all file, environment, and test instructions.
+- Include a section called "LLM idea loop" with safe, testable variants,
+  ablations, promptable hypotheses, and metrics the user can ask an LLM to try.
+- Clearly separate confirmed facts, assumptions, and open questions.
+- If the user gives links or ideas, incorporate them as optional experiments,
+  not as verified paper claims unless supported by the provided context.
+- Prefer free local tools and repo-local plugins; do not require paid plugins for
+  the default coding path.
+"""
+
 CONFERENCE_VENUES = (
     "NeurIPS, ICML, ICLR, AAAI, CVPR, ECCV, ICCV, WACV, and closely related "
     "top-tier workshops or proceedings"
@@ -193,6 +218,8 @@ QUERY_LINE_PATTERN = re.compile(
 )
 MAX_FOCUSED_PAPERS = 20
 REPRODUCTION_REPOS_DIR = Path("reproduction_repos")
+MAC_M2_CODING_MODEL_PRESET = "coding"
+MAC_M2_CODING_MODEL = "qwen2.5-coder:7b"
 EXIT_COMMANDS = {"", "q", "quit", "exit"}
 FOLLOW_UP_REQUEST_PATTERN = re.compile(
     r"^\s*(?:"
@@ -412,6 +439,23 @@ def build_reproduction_planner_agent() -> Agent:
         instructions=REPRODUCTION_PLANNER_INSTRUCTIONS,
         model=settings.model,
         tools=[save_research_note],
+    )
+
+
+def build_paper_coding_agent() -> Agent:
+    """Build an agent for paper-to-code implementation planning."""
+
+    settings = load_settings()
+    configure_model_provider(settings)
+    tools = [save_research_note, search_verified_recent_papers]
+    web_search = _build_web_search_tool(settings)
+    if web_search is not None:
+        tools.insert(0, web_search)
+    return Agent(
+        name="Paper Coding Agent",
+        instructions=PAPER_CODING_AGENT_INSTRUCTIONS,
+        model=settings.model,
+        tools=tools,
     )
 
 
@@ -1132,6 +1176,166 @@ async def plan_reproduction_repository(
         max_turns=12,
     )
     return result.final_output
+
+
+def _unique_reproduction_repo_path(base_name: str) -> Path:
+    """Return a non-existing path under the reproduction workspace directory."""
+
+    safe_base = _safe_repo_name(base_name)[:80].strip("-._") or "paper-coding-lab"
+    candidate = REPRODUCTION_REPOS_DIR / safe_base
+    suffix = 2
+    while candidate.exists():
+        candidate = REPRODUCTION_REPOS_DIR / f"{safe_base}-{suffix}"
+        suffix += 1
+    return candidate
+
+
+def prepare_paper_coding_environment(
+    paper_identifier: str,
+    implementation_goal: str = "",
+    idea_context: str = "",
+    *,
+    preferred_model: str = MAC_M2_CODING_MODEL,
+) -> str:
+    """Create a local coding workspace for paper implementation work.
+
+    The workspace is intentionally local and free-by-default: it uses the repo's
+    clean-room Python scaffold plus bootstrap scripts the user can run with a
+    local model server such as Ollama on a Mac M2 with 16GB RAM.
+    """
+
+    REPRODUCTION_REPOS_DIR.mkdir(parents=True, exist_ok=True)
+    repo_path = _unique_reproduction_repo_path(f"{paper_identifier}-coding-lab")
+    repo_path.mkdir(parents=True, exist_ok=False)
+
+    _write_dummy_dataset_scaffold(repo_path, repo_path.name)
+    (repo_path / "scripts").mkdir(exist_ok=True)
+    (repo_path / "experiments").mkdir(exist_ok=True)
+    (repo_path / "notebooks").mkdir(exist_ok=True)
+    (repo_path / "artifacts").mkdir(exist_ok=True)
+
+    (repo_path / "CODING_AGENT.md").write_text(
+        f"# Coding Agent Workspace\n\n"
+        f"Paper identifier or title: {paper_identifier}\n\n"
+        f"Implementation goal:\n{implementation_goal.strip() or 'Create a minimal reproducible implementation.'}\n\n"
+        f"LLM ideas / variants:\n{idea_context.strip() or 'No extra ideas supplied yet.'}\n\n"
+        "## Recommended local model\n\n"
+        f"Use the free local preset `{MAC_M2_CODING_MODEL_PRESET}` "
+        f"(`{preferred_model}`), which is sized for a Mac M2 with 16GB RAM.\n\n"
+        "## Free tools / plugins policy\n\n"
+        "The default coding path uses free local tooling. Use repo-local plugins only when explicitly requested, such as GitHub repo creation.\n\n"
+        "## Step-by-step loop\n\n"
+        "1. Run `bash scripts/bootstrap_env.sh` to create `.venv`, install test dependencies, and run smoke tests.\n"
+        "2. Replace the dummy dataset with the paper dataset or a small fixture.\n"
+        "3. Implement one module at a time in `src/reproduction_baseline/`.\n"
+        "4. Add or update pytest coverage before each experiment.\n"
+        "5. Record ablations in `experiments/README.md` and generated files in `artifacts/`.\n",
+        encoding="utf-8",
+    )
+    (repo_path / "scripts" / "bootstrap_env.sh").write_text(
+        "#!/usr/bin/env bash\n"
+        "set -euo pipefail\n"
+        "python3 -m venv .venv\n"
+        "source .venv/bin/activate\n"
+        "python -m pip install --upgrade pip\n"
+        "python -m pip install -e '.[test]'\n"
+        "pytest\n",
+        encoding="utf-8",
+    )
+    (repo_path / "scripts" / "bootstrap_env.sh").chmod(0o755)
+    (repo_path / "experiments" / "README.md").write_text(
+        "# Experiments\n\n"
+        "Track each coding-agent attempt, hypothesis, command, metric, and result here.\n",
+        encoding="utf-8",
+    )
+    (repo_path / "notebooks" / ".gitkeep").write_text("", encoding="utf-8")
+    (repo_path / "artifacts" / ".gitkeep").write_text("", encoding="utf-8")
+    (repo_path / ".env.example").write_text(
+        "RESEARCH_AGENTS_PROVIDER=ollama\n"
+        f"RESEARCH_AGENTS_MODEL={MAC_M2_CODING_MODEL_PRESET}\n"
+        "RESEARCH_AGENTS_BASE_URL=http://localhost:11434/v1\n"
+        "RESEARCH_AGENTS_API_KEY=ollama\n",
+        encoding="utf-8",
+    )
+
+    subprocess.run(["git", "init"], cwd=repo_path, check=True, capture_output=True, text=True)
+    _commit_scaffold(repo_path)
+
+    steps = [
+        "# Coding Console",
+        f"1. Created local workspace: {repo_path}",
+        "2. Created source, tests, data, scripts, experiments, notebooks, and artifacts folders.",
+        "3. Wrote scripts/bootstrap_env.sh to create a Python virtual environment and run smoke tests.",
+        "4. Added CODING_AGENT.md with the paper target, implementation goal, and LLM idea loop.",
+        f"5. Recommended free Mac M2 16GB coding model: {MAC_M2_CODING_MODEL_PRESET} ({preferred_model}).",
+        "6. Initialized git and committed the scaffold so future coding steps are reviewable.",
+        "",
+        "Next local command:",
+        f"bash {repo_path / 'scripts' / 'bootstrap_env.sh'}",
+    ]
+    return "\n".join(steps)
+
+
+def format_paper_coding_prompt(
+    paper_identifier: str,
+    implementation_goal: str = "",
+    idea_context: str = "",
+    workspace_context: str = "",
+) -> str:
+    """Build a prompt for the web coding workspace agent."""
+
+    goal = implementation_goal.strip() or "Create an implementation plan."
+    ideas = idea_context.strip() or "No extra idea prompts supplied yet."
+    workspace = workspace_context.strip() or "No workspace has been prepared yet."
+    return f"""
+The user opened the coding workspace for a research-paper implementation.
+Produce a practical coding plan that continues from the prepared local workspace.
+Use the workspace path and files below as the target for all coding steps.
+
+Paper ID or title:
+{paper_identifier}
+
+Implementation goal and constraints:
+{goal}
+
+Ideas, links, variants, or LLM experiment prompts to consider:
+{ideas}
+
+Prepared coding workspace:
+{workspace}
+
+Recommended free local model for Mac M2 16GB:
+{MAC_M2_CODING_MODEL_PRESET} ({MAC_M2_CODING_MODEL})
+
+Free tools / plugins policy:
+Use the prepared local workspace and free local tooling by default. Recommend repo-local plugins only when the user explicitly asks for them.
+
+Return:
+1. Paper identity and verification status.
+2. Implementation assumptions and missing inputs.
+3. Exact files and folders to edit next in the prepared workspace.
+4. Data, training, evaluation, and smoke-test commands.
+5. Incremental coding checkpoints with one command per checkpoint.
+6. LLM idea loop with safe variants, ablations, and metrics.
+""".strip()
+
+
+async def run_paper_coding_agent(
+    paper_identifier: str, implementation_goal: str = "", idea_context: str = ""
+) -> str:
+    """Prepare a coding workspace, then run the paper coding agent."""
+
+    workspace_context = prepare_paper_coding_environment(
+        paper_identifier, implementation_goal, idea_context
+    )
+    result = await Runner.run(
+        build_paper_coding_agent(),
+        format_paper_coding_prompt(
+            paper_identifier, implementation_goal, idea_context, workspace_context
+        ),
+        max_turns=16,
+    )
+    return f"{workspace_context}\n\n# Coding Agent Step-by-Step Plan\n\n{result.final_output}"
 
 
 async def _run_paper_reading_sequence(
