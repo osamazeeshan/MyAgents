@@ -176,6 +176,21 @@ def build_home_page() -> str:
     .secondary {{ color: var(--text); background: rgba(255,255,255,.09); border: 1px solid var(--border); }}
     .hint {{ color: var(--muted); font-size: 13px; }}
     .memory-pill {{ color: var(--accent); border: 1px solid rgba(124,247,212,.4); border-radius: 999px; padding: 8px 11px; margin-left: auto; }}
+    .agent-running {{
+      display: none; align-items: center; gap: 8px; color: var(--accent); border: 1px solid rgba(124,247,212,.36);
+      border-radius: 999px; padding: 7px 10px; background: rgba(124,247,212,.09); font-size: 13px; font-weight: 700;
+    }}
+    .agent-running.visible {{ display: inline-flex; }}
+    .agent-running-logo {{
+      width: 18px; height: 18px; border-radius: 6px; position: relative; overflow: hidden; flex: 0 0 auto;
+      background: radial-gradient(circle at 35% 35%, var(--accent) 0 24%, transparent 25%), rgba(181,140,255,.18);
+      box-shadow: 0 0 18px rgba(124,247,212,.55);
+      animation: agentPulse 1s ease-in-out infinite;
+    }}
+    .agent-running-logo::after {{
+      content: ""; position: absolute; inset: 4px 3px auto auto; width: 7px; height: 7px; border-top: 3px solid var(--hot); border-right: 3px solid var(--hot); border-radius: 2px;
+    }}
+    @keyframes agentPulse {{ 0%, 100% {{ transform: scale(.92) rotate(0deg); opacity: .72; }} 50% {{ transform: scale(1.08) rotate(8deg); opacity: 1; }} }}
     .conference-fields {{ display: none; gap: 10px; margin-bottom: 12px; }}
     .conference-fields.visible {{ display: grid; grid-template-columns: 1fr; }}
     details {{ margin-top: 16px; color: var(--muted); flex: 0 0 auto; }}
@@ -232,7 +247,7 @@ def build_home_page() -> str:
             <button class=\"primary\" id=\"run\">Run agents</button>
             <button class=\"secondary\" id=\"clear\">Clear input</button>
             <button class=\"secondary\" id=\"restore\">Restore latest</button>
-            <span class=\"hint\" id=\"busy\"></span>
+            <span class=\"agent-running\" id=\"agentRunning\" role=\"status\" aria-live=\"polite\" aria-hidden=\"true\"><span class=\"agent-running-logo\" aria-hidden=\"true\"></span><span id=\"busy\">Agents idle</span></span>
             <span class=\"memory-pill\" id=\"memoryState\">Memory on</span>
           </div>
         </div>
@@ -304,6 +319,12 @@ def build_home_page() -> str:
     }}
     function setOutput(text) {{ output.textContent = text || 'No output returned.'; output.scrollTop = output.scrollHeight; }}
     function appendOutput(label, text) {{ setOutput((output.textContent + '\\n\\n# ' + label + '\\n\\n' + text).trim()); }}
+    function setAgentRunning(isRunning) {{
+      const indicator = $('agentRunning');
+      indicator.classList.toggle('visible', isRunning);
+      indicator.setAttribute('aria-hidden', isRunning ? 'false' : 'true');
+      $('busy').textContent = isRunning ? 'Agents running…' : 'Agents idle';
+    }}
     function memoryContext() {{
       const chat = currentConversation();
       return chat.messages.slice(-12).map(m => (m.role === 'user' ? 'User' : 'Agent') + ': ' + m.text).join('\\n\\n');
@@ -343,7 +364,7 @@ def build_home_page() -> str:
       const context = $('context').value.trim() || state.lastReview || state.lastPaperContext || state.lastDiscovery;
       remember('user', prompt || 'Discover recent conference topics');
       setOutput(renderTranscript(currentConversation()) + '\\n\\nAgent is thinking…');
-      $('busy').textContent = 'Agents are thinking…'; $('run').disabled = true;
+      setAgentRunning(true); $('run').disabled = true;
       try {{
         if (state.mode === 'research') {{
           const data = await postJSON('/api/research', {{ prompt, memory: memoryContext() }}); remember('agent', data.output); setOutput(renderTranscript(currentConversation()));
@@ -357,7 +378,7 @@ def build_home_page() -> str:
           remember('agent', data.output); appendOutput('Follow-up: ' + prompt, data.output);
         }}
       }} catch (err) {{ const message = 'Error: ' + err.message; remember('agent', message); setOutput(renderTranscript(currentConversation())); }}
-      finally {{ $('busy').textContent = ''; $('run').disabled = false; $('prompt').value = ''; }}
+      finally {{ setAgentRunning(false); $('run').disabled = false; $('prompt').value = ''; }}
     }});
     loadConversations();
     fetch('/api/health').then(r => r.json()).then(data => {{ $('provider').textContent = data.provider; $('model').textContent = data.model; $('notes').textContent = data.notes_dir; }});

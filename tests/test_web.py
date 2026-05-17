@@ -19,6 +19,10 @@ def test_home_page_contains_persistent_memory_layout() -> None:
     assert "yourresearchguide.conversations.v1" in html
     assert "memory: memoryContext()" in html
     assert 'href="/favicon.ico"' in html
+    assert 'id=\"agentRunning\"' in html
+    assert 'agent-running-logo' in html
+    assert 'setAgentRunning(true)' in html
+    assert 'setAgentRunning(false)' in html
     assert ".conversation-list { display: grid; gap: 10px; overflow-y: auto;" in html
     assert ".suggestions { display: grid; gap: 12px; overflow-y: auto;" in html
 
