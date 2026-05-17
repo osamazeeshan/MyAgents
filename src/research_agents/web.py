@@ -7,12 +7,19 @@ import asyncio
 import html
 import json
 import logging
+import os
+import shutil
+import subprocess
+import tempfile
+import urllib.error
+import urllib.request
 import threading
 import webbrowser
+from pathlib import Path
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
-from urllib.parse import urlparse
+from urllib.parse import quote, urlencode, urlparse
 
 from .config import (
     format_local_model_presets,
@@ -27,6 +34,9 @@ DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8765
 MAX_BODY_BYTES = 1_000_000
 MAX_MEMORY_CHARS = 12_000
+MAX_FILE_BYTES = 250_000
+MAX_RUN_SECONDS = 20
+IGNORED_CODING_TREE_NAMES = {".git", ".venv", "__pycache__", ".pytest_cache"}
 FAVICON_SVG = """<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 64 64\">
   <rect width=\"64\" height=\"64\" rx=\"16\" fill=\"#070817\"/>
   <circle cx=\"22\" cy=\"24\" r=\"10\" fill=\"#7cf7d4\"/>
@@ -244,6 +254,25 @@ def build_home_page() -> str:
     .coding-console {{ min-height: 92px; max-height: 210px; overflow: auto; border: 1px solid rgba(124,247,212,.24); border-radius: 16px; padding: 12px; background: rgba(0,0,0,.28); color: #dffdf5; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 12px; line-height: 1.45; white-space: pre-wrap; }}
     .coding-console .muted {{ color: var(--muted); }}
     .coding-model-note {{ color: var(--muted); font-size: 12px; line-height: 1.35; }}
+    .code-interface-button {{ display: none; width: auto; min-height: 40px; border-radius: 14px; padding: 10px 12px; font-weight: 800; color: #06120f; background: var(--accent); border: 0; cursor: pointer; }}
+    .code-interface-button.visible {{ display: inline-flex; align-items: center; justify-content: center; }}
+    .code-interface {{ position: fixed; inset: 14px; z-index: 20; display: none; grid-template-rows: auto 1fr; border: 1px solid var(--border); border-radius: 24px; background: rgba(7,8,23,.96); box-shadow: var(--shadow); overflow: hidden; backdrop-filter: blur(22px); }}
+    .code-interface.visible {{ display: grid; }}
+    .code-interface-header {{ display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 14px 16px; border-bottom: 1px solid var(--border); background: rgba(31,37,75,.72); }}
+    .code-interface-header h2 {{ margin: 0; font-size: 18px; letter-spacing: -.02em; }}
+    .code-interface-header span {{ color: var(--muted); font-size: 12px; }}
+    .code-interface-actions {{ display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }}
+    .code-interface-body {{ display: grid; grid-template-columns: minmax(220px, 300px) minmax(0, 1fr); min-height: 0; }}
+    .file-tree-panel {{ border-right: 1px solid var(--border); padding: 14px; min-height: 0; overflow: auto; background: rgba(3,6,20,.38); }}
+    .file-tree-panel h3, .editor-panel h3 {{ margin: 0 0 10px; font-size: 12px; color: var(--accent); letter-spacing: .08em; text-transform: uppercase; }}
+    .file-tree {{ display: grid; gap: 3px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 12px; }}
+    .tree-node {{ width: 100%; border: 0; border-radius: 10px; padding: 6px 8px; text-align: left; color: var(--text); background: transparent; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }}
+    .tree-node:hover, .tree-node.active {{ background: rgba(124,247,212,.13); color: var(--accent); }}
+    .tree-node.folder {{ color: var(--muted); cursor: default; }}
+    .editor-panel {{ display: grid; grid-template-rows: auto minmax(0, 1fr) auto minmax(120px, 0.34fr); gap: 10px; min-height: 0; padding: 14px; }}
+    .editor-meta {{ display: flex; justify-content: space-between; gap: 12px; color: var(--muted); font-size: 12px; }}
+    .code-editor {{ min-height: 0; height: 100%; max-height: none; resize: none; border-radius: 16px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 13px; line-height: 1.5; tab-size: 2; }}
+    .run-console {{ min-height: 0; overflow: auto; white-space: pre-wrap; border: 1px solid rgba(181,140,255,.28); border-radius: 16px; padding: 12px; background: rgba(0,0,0,.34); color: #efe8ff; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 12px; line-height: 1.45; }}
     details {{ margin-top: 16px; color: var(--muted); flex: 0 0 auto; }}
     pre {{ overflow: auto; background: rgba(0,0,0,.3); padding: 12px; border-radius: 12px; }}
     @media (max-width: 1180px) {{
@@ -257,8 +286,10 @@ def build_home_page() -> str:
       .primary, .secondary, .memory-pill {{ width: auto; min-width: 0; }}
       .primary, .secondary {{ flex-basis: auto; }}
       .memory-pill {{ margin-left: 0; }}
+      .code-interface-body {{ grid-template-columns: 1fr; }}
+      .file-tree-panel {{ border-right: 0; border-bottom: 1px solid var(--border); max-height: 220px; }}
     }}
-    @media (max-width: 680px) {{ .status {{ grid-template-columns: 1fr; }} }}
+    @media (max-width: 680px) {{ .status {{ grid-template-columns: 1fr; }} .code-interface {{ inset: 6px; }} }}
   </style>
 </head>
 <body>
@@ -312,6 +343,7 @@ def build_home_page() -> str:
             <textarea id="ideaStream" placeholder="Optional: LLM idea prompts, variants to try, ablations, metrics, or links to explore."></textarea>
             <div class="coding-model-note">Recommended free local model for Mac M2 16GB: <b>coding · qwen2.5-coder:7b</b>. Install with <code>ollama pull qwen2.5-coder:7b</code>, then select it; coding mode will not force an unavailable model.</div>
             <div class="coding-console" id="codingConsole" aria-live="polite"><span class="muted">Coding console appears here when a coding request starts.</span></div>
+            <button class="code-interface-button" id="openCodeInterface" type="button">Open code interface</button>
           </div>
           <div class="conference-fields" id="conferenceFields">
             <input id="topic" placeholder="Selected topic (required for review/follow-up)" />
@@ -334,12 +366,39 @@ def build_home_page() -> str:
       </aside>
     </main>
   </div>
+  <section class="code-interface" id="codeInterface" aria-hidden="true" aria-label="Generated coding workspace browser">
+    <header class="code-interface-header">
+      <div>
+        <h2>Generated code interface</h2>
+        <span id="workspacePath">No workspace loaded yet.</span>
+      </div>
+      <div class="code-interface-actions">
+        <button class="secondary" id="publishGithub" type="button">Publish GitHub</button>
+        <button class="secondary" id="refreshTree" type="button">Refresh tree</button>
+        <button class="secondary" id="saveCode" type="button">Save code</button>
+        <button class="primary" id="runDummy" type="button">Run dummy</button>
+        <button class="secondary" id="closeCodeInterface" type="button">Close</button>
+      </div>
+    </header>
+    <div class="code-interface-body">
+      <aside class="file-tree-panel">
+        <h3>Files and folders</h3>
+        <div class="file-tree" id="fileTree">Run the coding agent, then open this interface.</div>
+      </aside>
+      <section class="editor-panel">
+        <div class="editor-meta"><h3>Code console</h3><span id="selectedFile">Select a file to edit.</span></div>
+        <textarea class="code-editor" id="codeEditor" spellcheck="false" placeholder="Select a generated file from the tree. Changes are saved back to the local workspace."></textarea>
+        <div class="editor-meta"><span>Dummy-data verification runs the generated scaffold against data/dummy_dataset.csv.</span><span id="saveState">Idle</span></div>
+        <pre class="run-console" id="runConsole">Run output will appear here. Use Publish GitHub to create a GitHub repository with the repo-local plugin and push this workspace.</pre>
+      </section>
+    </div>
+  </section>
 
   <script>
     const STORAGE_KEY = 'researchagent.conversations.v1';
     const LEGACY_STORAGE_KEY = 'yourresearchguide.conversations.v1';
     const ANCIENT_STORAGE_KEY = 'agentarium.conversations.v1';
-    const state = {{ mode: 'research', lastDiscovery: '', lastPaperContext: '', lastReview: '', lastCoding: '', conversations: [], currentId: '', activeModelProvider: '' }};
+    const state = {{ mode: 'research', lastDiscovery: '', lastPaperContext: '', lastReview: '', lastCoding: '', conversations: [], currentId: '', activeModelProvider: '', currentWorkspace: '', selectedFile: '' }};
     const $ = (id) => document.getElementById(id);
     const output = $('output');
 
@@ -433,6 +492,81 @@ def build_home_page() -> str:
       consoleBox.scrollTop = consoleBox.scrollHeight;
     }}
     function appendCodingConsole(line) {{ setCodingConsole(($('codingConsole').textContent + '\\n' + line).trim()); }}
+    function setCodeInterfaceVisible(isVisible) {{
+      $('codeInterface').classList.toggle('visible', isVisible);
+      $('codeInterface').setAttribute('aria-hidden', isVisible ? 'false' : 'true');
+    }}
+    function updateCodeInterfaceButton() {{
+      $('openCodeInterface').classList.toggle('visible', Boolean(state.currentWorkspace));
+      $('workspacePath').textContent = state.currentWorkspace || 'No workspace loaded yet.';
+    }}
+    function renderFileTree(nodes, depth = 0) {{
+      const fragment = document.createDocumentFragment();
+      (nodes || []).forEach(node => {{
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'tree-node ' + (node.type === 'directory' ? 'folder' : 'file') + (node.path === state.selectedFile ? ' active' : '');
+        btn.style.paddingLeft = (8 + depth * 14) + 'px';
+        btn.textContent = (node.type === 'directory' ? '▸ ' : '• ') + node.name;
+        btn.title = node.path || node.name;
+        if (node.type === 'file') btn.addEventListener('click', () => openWorkspaceFile(node.path));
+        fragment.appendChild(btn);
+        if (node.children && node.children.length) fragment.appendChild(renderFileTree(node.children, depth + 1));
+      }});
+      return fragment;
+    }}
+    async function refreshWorkspaceTree() {{
+      if (!state.currentWorkspace) {{ $('fileTree').textContent = 'No generated workspace yet. Run the coding agent first.'; return; }}
+      $('fileTree').textContent = 'Loading workspace tree…';
+      const data = await postJSON('/api/coding/files', {{ workspace: state.currentWorkspace }});
+      state.currentWorkspace = data.workspace;
+      updateCodeInterfaceButton();
+      $('fileTree').innerHTML = '';
+      $('fileTree').appendChild(renderFileTree(data.tree || []));
+    }}
+    async function openWorkspaceFile(path) {{
+      const data = await postJSON('/api/coding/file', {{ workspace: state.currentWorkspace, path }});
+      state.selectedFile = data.path;
+      $('selectedFile').textContent = data.path;
+      $('codeEditor').value = data.content;
+      $('saveState').textContent = 'Loaded';
+      await refreshWorkspaceTree();
+    }}
+    async function saveWorkspaceFile() {{
+      if (!state.currentWorkspace || !state.selectedFile) {{ $('saveState').textContent = 'Select a file first'; return; }}
+      $('saveState').textContent = 'Saving…';
+      const data = await postJSON('/api/coding/save', {{ workspace: state.currentWorkspace, path: state.selectedFile, content: $('codeEditor').value }});
+      $('saveState').textContent = data.saved ? 'Saved ' + new Date().toLocaleTimeString() : 'Not saved';
+    }}
+    async function runDummyWorkspace() {{
+      if (!state.currentWorkspace) {{ $('runConsole').textContent = 'No generated workspace yet.'; return; }}
+      $('runConsole').textContent = 'Running dummy-data verification…';
+      const data = await postJSON('/api/coding/run', {{ workspace: state.currentWorkspace }});
+      $('runConsole').textContent = data.command + '\\n\\nExit code: ' + data.returncode + '\\n\\n' + (data.output || '(no output)');
+    }}
+    function defaultGithubRepoName() {{
+      const workspace = state.currentWorkspace.split(/[\\/]/).filter(Boolean).pop() || 'paper-coding-workspace';
+      return workspace.replace(/[^a-zA-Z0-9._-]+/g, '-').replace(/^-+|-+$/g, '') || 'paper-coding-workspace';
+    }}
+    async function publishWorkspaceToGithub() {{
+      if (!state.currentWorkspace) {{ $('runConsole').textContent = 'No generated workspace yet.'; return; }}
+      const repoName = prompt('GitHub repository name', defaultGithubRepoName());
+      if (!repoName) {{ $('runConsole').textContent = 'GitHub publish cancelled.'; return; }}
+      const owner = prompt('Optional GitHub owner or organization (leave blank for your account)', '') || '';
+      const privateRepo = confirm('Create this GitHub repository as private? Press Cancel for public.');
+      $('runConsole').textContent = 'Publishing workspace to GitHub…';
+      const data = await postJSON('/api/coding/publish', {{ workspace: state.currentWorkspace, repo: repoName, owner, private: privateRepo }});
+      const lines = [data.message || 'GitHub publish request finished.'];
+      if (data.html_url) lines.push('Repository: ' + data.html_url);
+      if (data.pull_request_url) lines.push('Pull request: ' + data.pull_request_url);
+      if (data.compare_url) lines.push('Create PR page: ' + data.compare_url);
+      if (data.create_url) lines.push('Create repo page: ' + data.create_url);
+      if (data.push_command) lines.push('Manual push command: ' + data.push_command);
+      if (data.error) lines.push('Error: ' + data.error);
+      $('runConsole').textContent = lines.join('\\n');
+      const publishUrl = data.pull_request_url || data.compare_url || data.html_url || data.create_url;
+      if (publishUrl) window.open(publishUrl, '_blank', 'noopener');
+    }}
     function activateMode(mode) {{
       const targetMode = mode || 'research';
       document.querySelectorAll('.mode').forEach(b => b.classList.toggle('active', b.dataset.mode === targetMode));
@@ -450,6 +584,12 @@ def build_home_page() -> str:
     $('deleteChat').addEventListener('click', () => {{ state.conversations = state.conversations.filter(c => c.id !== state.currentId); if (!state.conversations.length) state.conversations = [newConversation()]; state.currentId = state.conversations[0].id; saveConversations(); hydrateCurrent(); }});
     $('restore').addEventListener('click', hydrateCurrent);
     $('clear').addEventListener('click', () => {{ $('prompt').value = ''; $('topic').value = ''; $('paperIdentifier').value = ''; $('codingGoal').value = ''; $('ideaStream').value = ''; setCodingConsole('Coding console appears here when a coding request starts.'); }});
+    $('openCodeInterface').addEventListener('click', async () => {{ setCodeInterfaceVisible(true); try {{ await refreshWorkspaceTree(); }} catch (err) {{ $('fileTree').textContent = 'Error: ' + err.message; }} }});
+    $('closeCodeInterface').addEventListener('click', () => setCodeInterfaceVisible(false));
+    $('refreshTree').addEventListener('click', () => refreshWorkspaceTree().catch(err => {{ $('fileTree').textContent = 'Error: ' + err.message; }}));
+    $('saveCode').addEventListener('click', () => saveWorkspaceFile().catch(err => {{ $('saveState').textContent = 'Error: ' + err.message; }}));
+    $('runDummy').addEventListener('click', () => runDummyWorkspace().catch(err => {{ $('runConsole').textContent = 'Error: ' + err.message; }}));
+    $('publishGithub').addEventListener('click', () => publishWorkspaceToGithub().catch(err => {{ $('runConsole').textContent = 'Error: ' + err.message; }}));
     $('run').addEventListener('click', async () => {{
       const prompt = $('prompt').value.trim();
       if (state.mode === 'research' && looksLikeCodingRequest(prompt)) activateMode('coding');
@@ -476,7 +616,7 @@ def build_home_page() -> str:
           $('codingState').textContent = 'Coding agent running…';
           setCodingConsole(['1. Detect coding request and open the coding workspace.', '2. Use the currently selected model; recommended Mac M2 install: ollama pull qwen2.5-coder:7b.', '3. Create a local workspace under reproduction_repos/.', '4. Write environment bootstrap files, source folders, tests, and experiment notes.', '5. Ask the coding model for step-by-step implementation work.']);
           const data = await postJSON('/api/coding/implement', {{ paper: paperIdentifier, goal: codingGoal || prompt, ideas: ideaStream, memory: memoryContext(), model: selectedModel() }});
-          state.lastCoding = data.output; setCodingConsole(data.console || data.output); const chat = currentConversation(); chat.lastCoding = data.output; remember('agent', data.output); setOutput(renderTranscript(currentConversation()));
+          state.lastCoding = data.output; if (data.workspace) {{ state.currentWorkspace = data.workspace; updateCodeInterfaceButton(); }} setCodingConsole(data.console || data.output); const chat = currentConversation(); chat.lastCoding = data.output; remember('agent', data.output); setOutput(renderTranscript(currentConversation()));
         }} else {{
           const data = await postJSON('/api/conference/follow-up', {{ question: prompt, selected_topic: topic, paper_context: state.lastPaperContext || context, review_context: state.lastReview || context, memory: memoryContext(), model: selectedModel() }});
           remember('agent', data.output); appendOutput('Follow-up: ' + prompt, data.output);
@@ -485,6 +625,7 @@ def build_home_page() -> str:
       finally {{ setAgentRunning(false); $('run').disabled = false; if (state.mode === 'coding') $('codingState').textContent = 'Ready for coding'; $('prompt').value = ''; }}
     }});
     $('modelChoice').addEventListener('change', () => {{ $('model').textContent = $('modelChoice').selectedOptions[0].textContent.split(' · ').pop(); }});
+    updateCodeInterfaceButton();
     loadConversations();
     fetch('/api/health').then(r => r.json()).then(data => {{ $('model').textContent = data.model; state.activeModelProvider = data.provider; }});
   </script>
@@ -554,6 +695,396 @@ def format_memory_augmented_prompt(prompt: str, memory: str) -> str:
     )
 
 
+def _extract_coding_workspace_path(output: str) -> str:
+    """Return the generated workspace path from coding-agent console text."""
+
+    for line in output.splitlines():
+        marker = "Created local workspace:"
+        if marker in line:
+            return line.split(marker, 1)[1].strip()
+    return ""
+
+
+def _resolve_workspace(workspace: str) -> Path:
+    """Resolve a browser-supplied coding workspace under reproduction_repos/."""
+
+    if not workspace.strip():
+        raise ValueError("'workspace' is required")
+    path = Path(workspace.strip())
+    if not path.is_absolute():
+        path = Path.cwd() / path
+    resolved = path.resolve()
+    allowed_root = (Path.cwd() / "reproduction_repos").resolve()
+    if resolved != allowed_root and allowed_root not in resolved.parents:
+        raise ValueError("workspace must be inside reproduction_repos")
+    if not resolved.is_dir():
+        raise ValueError(f"workspace does not exist: {workspace}")
+    return resolved
+
+
+def _resolve_workspace_file(workspace: str, relative_path: str) -> Path:
+    """Resolve a file path inside a validated coding workspace."""
+
+    root = _resolve_workspace(workspace)
+    if not isinstance(relative_path, str) or not relative_path.strip():
+        raise ValueError("'path' is required")
+    candidate = (root / relative_path).resolve()
+    if candidate != root and root not in candidate.parents:
+        raise ValueError("path must stay inside the coding workspace")
+    if any(
+        part in IGNORED_CODING_TREE_NAMES for part in candidate.relative_to(root).parts
+    ):
+        raise ValueError("path is not editable from the coding interface")
+    return candidate
+
+
+def _build_coding_tree(root: Path) -> list[dict[str, Any]]:
+    """Return a lightweight sorted file tree for the coding interface."""
+
+    def node_for(path: Path) -> dict[str, Any] | None:
+        if path.name in IGNORED_CODING_TREE_NAMES:
+            return None
+        rel = path.relative_to(root).as_posix()
+        if path.is_dir():
+            children = [
+                node
+                for child in sorted(
+                    path.iterdir(), key=lambda p: (not p.is_dir(), p.name.lower())
+                )
+                if (node := node_for(child))
+            ]
+            return {
+                "name": path.name,
+                "path": rel,
+                "type": "directory",
+                "children": children,
+            }
+        if path.stat().st_size > MAX_FILE_BYTES:
+            return None
+        return {"name": path.name, "path": rel, "type": "file"}
+
+    return [
+        node
+        for child in sorted(
+            root.iterdir(), key=lambda p: (not p.is_dir(), p.name.lower())
+        )
+        if (node := node_for(child))
+    ]
+
+
+def _read_workspace_file(workspace: str, relative_path: str) -> dict[str, Any]:
+    """Read a UTF-8 text file for browser editing."""
+
+    path = _resolve_workspace_file(workspace, relative_path)
+    if not path.is_file():
+        raise ValueError("selected path is not a file")
+    if path.stat().st_size > MAX_FILE_BYTES:
+        raise ValueError("file is too large for the coding interface")
+    try:
+        content = path.read_text(encoding="utf-8")
+    except UnicodeDecodeError as exc:
+        raise ValueError("only UTF-8 text files can be opened") from exc
+    root = _resolve_workspace(workspace)
+    return {
+        "workspace": str(root),
+        "path": path.relative_to(root).as_posix(),
+        "content": content,
+    }
+
+
+def _save_workspace_file(
+    workspace: str, relative_path: str, content: str
+) -> dict[str, Any]:
+    """Save browser-edited code back to the generated workspace."""
+
+    if not isinstance(content, str):
+        raise ValueError("'content' must be a string")
+    encoded = content.encode("utf-8")
+    if len(encoded) > MAX_FILE_BYTES:
+        raise ValueError("content is too large for the coding interface")
+    path = _resolve_workspace_file(workspace, relative_path)
+    if not path.is_file():
+        raise ValueError("selected path is not a file")
+    path.write_bytes(encoded)
+    root = _resolve_workspace(workspace)
+    return {
+        "workspace": str(root),
+        "path": path.relative_to(root).as_posix(),
+        "saved": True,
+    }
+
+
+def _run_workspace_dummy_data(workspace: str) -> dict[str, Any]:
+    """Run the generated scaffold against its dummy dataset."""
+
+    root = _resolve_workspace(workspace)
+    command = [
+        "python",
+        "src/reproduction_baseline/baseline.py",
+        "data/dummy_dataset.csv",
+    ]
+    env = {**os.environ, "PYTHONPATH": str(root / "src")}
+    completed = subprocess.run(
+        command,
+        cwd=root,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=MAX_RUN_SECONDS,
+        check=False,
+    )
+    output = "\n".join(
+        part for part in [completed.stdout.strip(), completed.stderr.strip()] if part
+    )
+    return {
+        "workspace": str(root),
+        "command": "PYTHONPATH=src " + " ".join(command),
+        "returncode": completed.returncode,
+        "output": output,
+    }
+
+
+def _github_new_repo_url(
+    repo_name: str, description: str = "", private: bool = False
+) -> str:
+    """Return a GitHub web URL for manual repository creation fallback."""
+
+    query = {
+        "name": repo_name.strip() or "paper-coding-workspace",
+        "description": description.strip() or "ResearchAgent coding workspace",
+        "visibility": "private" if private else "public",
+    }
+    return "https://github.com/new?" + urlencode(query)
+
+
+def _run_git(
+    args: list[str], cwd: Path, *, timeout: int = 60
+) -> subprocess.CompletedProcess[str]:
+    """Run a git command and return the completed process."""
+
+    return subprocess.run(
+        ["git", *args],
+        cwd=cwd,
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=timeout,
+    )
+
+
+def _copy_workspace_contents_for_publish(source: Path, destination: Path) -> None:
+    """Copy generated workspace files into a temporary publish checkout."""
+
+    ignored = {".git", ".venv", "__pycache__", ".pytest_cache"}
+    for item in source.iterdir():
+        if item.name in ignored:
+            continue
+        target = destination / item.name
+        if item.is_dir():
+            shutil.copytree(
+                item,
+                target,
+                ignore=shutil.ignore_patterns("__pycache__", ".pytest_cache"),
+            )
+        else:
+            shutil.copy2(item, target)
+
+
+def _github_repo_slug(html_url: str) -> str:
+    """Return owner/repo for normal GitHub URLs, otherwise an empty string."""
+
+    parsed = urlparse(html_url)
+    if parsed.netloc.lower() != "github.com":
+        return ""
+    parts = [part for part in parsed.path.strip("/").split("/") if part]
+    if len(parts) < 2:
+        return ""
+    return "/".join(parts[:2])
+
+
+def _github_compare_url(html_url: str, branch: str) -> str:
+    """Return the browser URL for creating a PR from the pushed branch."""
+
+    if not _github_repo_slug(html_url):
+        return ""
+    return f"{html_url.rstrip('/')}/compare/main...{quote(branch)}?expand=1"
+
+
+def _create_github_pull_request(
+    html_url: str, branch: str, title: str, body: str
+) -> str:
+    """Create a GitHub pull request when token or gh CLI auth is available."""
+
+    slug = _github_repo_slug(html_url)
+    if not slug:
+        return ""
+
+    token = os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN")
+    if token:
+        request = urllib.request.Request(
+            f"https://api.github.com/repos/{slug}/pulls",
+            data=json.dumps(
+                {"title": title, "head": branch, "base": "main", "body": body}
+            ).encode("utf-8"),
+            headers={
+                "Accept": "application/vnd.github+json",
+                "Authorization": f"Bearer {token}",
+                "Content-Type": "application/json",
+                "User-Agent": "ResearchAgent/0.1",
+                "X-GitHub-Api-Version": "2022-11-28",
+            },
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=30) as response:
+                data = json.loads(response.read().decode("utf-8"))
+        except (urllib.error.HTTPError, urllib.error.URLError):
+            return ""
+        html_pr_url = data.get("html_url")
+        return html_pr_url if isinstance(html_pr_url, str) else ""
+
+    if shutil.which("gh") is None:
+        return ""
+    result = subprocess.run(
+        [
+            "gh",
+            "pr",
+            "create",
+            "--repo",
+            slug,
+            "--base",
+            "main",
+            "--head",
+            branch,
+            "--title",
+            title,
+            "--body",
+            body,
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    if result.returncode != 0:
+        return ""
+    return result.stdout.strip().splitlines()[-1] if result.stdout.strip() else ""
+
+
+def _push_workspace_pull_request_branch(root: Path, html_url: str) -> dict[str, str]:
+    """Push workspace files to a PR branch, using main as a minimal base."""
+
+    branch = "researchagent-coding-workspace"
+    with tempfile.TemporaryDirectory(prefix="researchagent-publish-") as tmpdir:
+        publish_root = Path(tmpdir)
+        _run_git(["init", "--initial-branch", "main"], publish_root)
+        _run_git(["config", "user.name", "ResearchAgent"], publish_root)
+        _run_git(["config", "user.email", "researchagent@example.com"], publish_root)
+        (publish_root / "README.md").write_text(
+            "# ResearchAgent coding workspace\n\n"
+            "Open the pull request branch to review generated code.\n",
+            encoding="utf-8",
+        )
+        _run_git(["add", "README.md"], publish_root)
+        _run_git(
+            ["commit", "-m", "Initialize repository for coding workspace PR"],
+            publish_root,
+        )
+        _run_git(["remote", "add", "origin", html_url], publish_root)
+        _run_git(["push", "-u", "origin", "main"], publish_root)
+        _run_git(["checkout", "-b", branch], publish_root)
+        _copy_workspace_contents_for_publish(root, publish_root)
+        _run_git(["add", "-A"], publish_root)
+        _run_git(["commit", "-m", "Add ResearchAgent coding workspace"], publish_root)
+        _run_git(["push", "-u", "origin", branch], publish_root)
+
+    compare_url = _github_compare_url(html_url, branch)
+    pull_request_url = _create_github_pull_request(
+        html_url,
+        branch,
+        "Add ResearchAgent coding workspace",
+        "This PR publishes the files generated and edited in the ResearchAgent "
+        "coding workspace.",
+    )
+    return {
+        "branch": branch,
+        "compare_url": compare_url,
+        "pull_request_url": pull_request_url,
+        "push_command": f"git push -u origin {branch}",
+    }
+
+
+def _publish_workspace_to_github(
+    workspace: str, repo_name: str, owner: str = "", private: bool = False
+) -> dict[str, Any]:
+    """Create a GitHub repository, push a branch, and open/create a PR."""
+
+    from .workflow import create_github_repository
+
+    root = _resolve_workspace(workspace)
+    safe_repo_name = repo_name.strip() or root.name
+    description = f"ResearchAgent coding workspace from {root.name}"
+    create_url = _github_new_repo_url(safe_repo_name, description, private)
+    try:
+        html_url = create_github_repository(
+            safe_repo_name,
+            description=description,
+            private=private,
+            owner=owner.strip(),
+        )
+    except Exception as exc:
+        return {
+            "published": False,
+            "pushed": False,
+            "pull_request_created": False,
+            "create_url": create_url,
+            "error": str(exc),
+            "message": (
+                "Could not create the repository automatically. A GitHub repo "
+                "creation page was opened; create the repo there, then push a "
+                "branch and open a pull request."
+            ),
+        }
+
+    try:
+        pr_result = _push_workspace_pull_request_branch(root, html_url)
+    except Exception as exc:
+        compare_url = _github_compare_url(html_url, "researchagent-coding-workspace")
+        return {
+            "published": True,
+            "pushed": False,
+            "pull_request_created": False,
+            "html_url": html_url,
+            "create_url": create_url,
+            "compare_url": compare_url,
+            "error": str(exc),
+            "message": (
+                "GitHub repository was created, but pushing the pull request "
+                "branch failed. Check GitHub auth and push the workspace branch "
+                "manually."
+            ),
+        }
+
+    pull_request_url = pr_result.get("pull_request_url", "")
+    compare_url = pr_result.get("compare_url", "")
+    return {
+        "published": True,
+        "pushed": True,
+        "pull_request_created": bool(pull_request_url),
+        "html_url": html_url,
+        "branch": pr_result["branch"],
+        "compare_url": compare_url,
+        "pull_request_url": pull_request_url,
+        "push_command": pr_result["push_command"],
+        "message": (
+            "Published the coding workspace to a GitHub pull request."
+            if pull_request_url
+            else "Pushed the coding workspace branch; open the create-PR page to finish the pull request."
+        ),
+    }
+
+
+
 async def handle_api_request(path: str, payload: dict[str, Any]) -> dict[str, Any]:
     """Route a JSON API request to the appropriate agent workflow."""
 
@@ -621,7 +1152,40 @@ async def _handle_api_request(path: str, payload: dict[str, Any]) -> dict[str, A
             ),
             idea_context=_optional_text(payload, "ideas"),
         )
-        return {"output": output}
+        response = {"output": output}
+        if workspace := _extract_coding_workspace_path(output):
+            response["workspace"] = workspace
+        return response
+
+    if path == "/api/coding/files":
+        workspace = _resolve_workspace(_require_text(payload, "workspace"))
+        return {"workspace": str(workspace), "tree": _build_coding_tree(workspace)}
+
+    if path == "/api/coding/file":
+        return _read_workspace_file(
+            _require_text(payload, "workspace"), _require_text(payload, "path")
+        )
+
+    if path == "/api/coding/save":
+        return _save_workspace_file(
+            _require_text(payload, "workspace"),
+            _require_text(payload, "path"),
+            payload.get("content", ""),
+        )
+
+    if path == "/api/coding/run":
+        return _run_workspace_dummy_data(_require_text(payload, "workspace"))
+
+    if path == "/api/coding/publish":
+        private = payload.get("private", False)
+        if not isinstance(private, bool):
+            raise ValueError("'private' must be a boolean")
+        return _publish_workspace_to_github(
+            _require_text(payload, "workspace"),
+            _require_text(payload, "repo"),
+            _optional_text(payload, "owner"),
+            private,
+        )
 
     raise KeyError(path)
 
