@@ -36,7 +36,7 @@ def test_home_page_contains_persistent_memory_layout() -> None:
     assert ".help-icon::after" in html
     assert "top: calc(100% + 9px)" in html
     assert ".workspace.card { background: transparent; border-color: transparent; box-shadow: none; backdrop-filter: none; padding: 0; }" in html
-    assert ".modebar { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 7px; margin-bottom: 12px; }" in html
+    assert ".modebar { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 7px; margin-bottom: 12px; }" in html
     assert "font-size: 12px; line-height: 1.15; white-space: nowrap;" in html
     assert "Choose a model before running agents. Local presets use your configured OpenAI-compatible provider." in html
     assert 'id="provider"' not in html
@@ -85,3 +85,17 @@ def test_favicon_route_returns_svg_icon() -> None:
     assert response.status == 200
     assert response.getheader("Content-Type") == "image/svg+xml; charset=utf-8"
     assert "<svg" in body
+
+
+def test_home_page_includes_paper_coding_workspace() -> None:
+    html = build_home_page()
+
+    assert "Paper Coding Agent" in html
+    assert "Paper coding agent" in html
+    assert 'id="codingWindow"' in html
+    assert 'id="paperIdentifier"' in html
+    assert 'id="codingGoal"' in html
+    assert 'id="ideaStream"' in html
+    assert "/api/coding/implement" in html
+    assert "state.mode === 'coding'" in html
+    assert "codingWindow').classList.toggle('visible'" in html

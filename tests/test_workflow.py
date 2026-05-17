@@ -425,3 +425,47 @@ def test_web_conference_review_api_chains_paper_search_and_review(monkeypatch) -
     )
 
     assert result == {"paper_context": "papers", "review": "review"}
+
+
+def test_format_paper_coding_prompt_includes_identifier_goal_and_ideas() -> None:
+    from research_agents.workflow import format_paper_coding_prompt
+
+    prompt = format_paper_coding_prompt(
+        "arXiv:1706.03762",
+        "Implement in PyTorch with pytest smoke tests.",
+        "Try a small ablation and an LLM-generated optimizer variant.",
+    )
+
+    assert "arXiv:1706.03762" in prompt
+    assert "Implement in PyTorch" in prompt
+    assert "LLM-generated optimizer variant" in prompt
+    assert "LLM idea loop" in prompt
+
+
+def test_web_coding_api_delegates_to_workflow(monkeypatch) -> None:
+    import asyncio
+    import research_agents.workflow as workflow
+    from research_agents.web import handle_api_request
+
+    async def fake_run_paper_coding_agent(
+        paper_identifier: str, implementation_goal: str = "", idea_context: str = ""
+    ) -> str:
+        assert paper_identifier == "arXiv:1706.03762"
+        assert "PyTorch" in implementation_goal
+        assert idea_context == "Try adapters"
+        return "coding plan"
+
+    monkeypatch.setattr(workflow, "run_paper_coding_agent", fake_run_paper_coding_agent)
+
+    result = asyncio.run(
+        handle_api_request(
+            "/api/coding/implement",
+            {
+                "paper": "arXiv:1706.03762",
+                "goal": "PyTorch implementation",
+                "ideas": "Try adapters",
+            },
+        )
+    )
+
+    assert result == {"output": "coding plan"}

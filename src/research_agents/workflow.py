@@ -179,6 +179,27 @@ pseudocode, tests, and an incremental coding checklist. Ask the user for
 confirmation before each next implementation step.
 """
 
+PAPER_CODING_AGENT_INSTRUCTIONS = """
+You are a coding agent for research-paper implementation. The user supplies a
+paper identifier or title, implementation constraints, and optional idea prompts.
+Your job is to turn that into an actionable coding workspace plan.
+
+Rules:
+- Treat arXiv IDs, DOIs, URLs, and titles as paper identifiers to verify or ask
+  the user to verify; do not invent paper details when the identifier is
+  ambiguous.
+- When web search is available, use it to ground paper metadata, official code,
+  datasets, and project pages. Prefer official paper pages, arXiv, DOI landing
+  pages, Papers with Code, GitHub, Hugging Face, and dataset homepages.
+- Design for implementation: break the method into modules, data contracts,
+  tests, smoke commands, and incremental checkpoints.
+- Include a section called "LLM idea loop" with safe, testable variants,
+  ablations, promptable hypotheses, and metrics the user can ask an LLM to try.
+- Clearly separate confirmed facts, assumptions, and open questions.
+- If the user gives links or ideas, incorporate them as optional experiments,
+  not as verified paper claims unless supported by the provided context.
+"""
+
 CONFERENCE_VENUES = (
     "NeurIPS, ICML, ICLR, AAAI, CVPR, ECCV, ICCV, WACV, and closely related "
     "top-tier workshops or proceedings"
@@ -412,6 +433,23 @@ def build_reproduction_planner_agent() -> Agent:
         instructions=REPRODUCTION_PLANNER_INSTRUCTIONS,
         model=settings.model,
         tools=[save_research_note],
+    )
+
+
+def build_paper_coding_agent() -> Agent:
+    """Build an agent for paper-to-code implementation planning."""
+
+    settings = load_settings()
+    configure_model_provider(settings)
+    tools = [save_research_note, search_verified_recent_papers]
+    web_search = _build_web_search_tool(settings)
+    if web_search is not None:
+        tools.insert(0, web_search)
+    return Agent(
+        name="Paper Coding Agent",
+        instructions=PAPER_CODING_AGENT_INSTRUCTIONS,
+        model=settings.model,
+        tools=tools,
     )
 
 
@@ -1130,6 +1168,49 @@ async def plan_reproduction_repository(
             repo_result,
         ),
         max_turns=12,
+    )
+    return result.final_output
+
+
+def format_paper_coding_prompt(
+    paper_identifier: str, implementation_goal: str = "", idea_context: str = ""
+) -> str:
+    """Build a prompt for the web coding workspace agent."""
+
+    goal = implementation_goal.strip() or "Create an implementation plan."
+    ideas = idea_context.strip() or "No extra idea prompts supplied yet."
+    return f"""
+The user opened the coding workspace for a research-paper implementation.
+Produce a practical coding plan, not just a literature summary.
+
+Paper ID or title:
+{paper_identifier}
+
+Implementation goal and constraints:
+{goal}
+
+Ideas, links, variants, or LLM experiment prompts to consider:
+{ideas}
+
+Return:
+1. Paper identity and verification status.
+2. Implementation assumptions and missing inputs.
+3. Proposed repository/modules/classes/functions.
+4. Data, training, evaluation, and smoke-test commands.
+5. Incremental coding checkpoints.
+6. LLM idea loop with safe variants, ablations, and metrics.
+""".strip()
+
+
+async def run_paper_coding_agent(
+    paper_identifier: str, implementation_goal: str = "", idea_context: str = ""
+) -> str:
+    """Run the paper coding agent for a paper identifier or title."""
+
+    result = await Runner.run(
+        build_paper_coding_agent(),
+        format_paper_coding_prompt(paper_identifier, implementation_goal, idea_context),
+        max_turns=16,
     )
     return result.final_output
 
