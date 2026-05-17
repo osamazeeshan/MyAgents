@@ -15,6 +15,7 @@ from agents import (
     Runner,
     SQLiteSession,
     WebSearchTool,
+    handoff,
     set_default_openai_api,
     set_default_openai_client,
     set_tracing_disabled,
@@ -210,6 +211,23 @@ REPRODUCTION_REQUEST_PATTERN = re.compile(
 )
 
 
+def build_handoff_tool_name(agent_name: str) -> str:
+    """Return a stable function-call-safe handoff tool name for a display name.
+
+    The OpenAI function-calling APIs only allow letters, digits, and underscores
+    in tool names. Agent display names may contain spaces, punctuation, or other
+    special characters, so keep those names for users while exposing a sanitized
+    handoff tool name to the model.
+    """
+
+    normalized = re.sub(r"\W+", "_", agent_name, flags=re.ASCII).strip("_").lower()
+    if not normalized:
+        normalized = "agent"
+    if normalized[0].isdigit():
+        normalized = f"agent_{normalized}"
+    return f"transfer_to_{normalized}"
+
+
 def configure_model_provider(settings: ResearchAgentSettings) -> None:
     """Configure the Agents SDK for OpenAI or OpenAI-compatible local models."""
 
@@ -273,7 +291,11 @@ def build_research_orchestrator() -> Agent:
         name="Research Orchestrator",
         instructions=ORCHESTRATOR_INSTRUCTIONS,
         model=settings.model,
-        handoffs=[planner, scout, reviewer],
+        handoffs=[
+            handoff(planner, tool_name_override=build_handoff_tool_name(planner.name)),
+            handoff(scout, tool_name_override=build_handoff_tool_name(scout.name)),
+            handoff(reviewer, tool_name_override=build_handoff_tool_name(reviewer.name)),
+        ],
     )
 
 
