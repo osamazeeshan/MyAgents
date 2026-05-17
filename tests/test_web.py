@@ -1,4 +1,6 @@
 import http.client
+import re
+import subprocess
 import sys
 import threading
 from pathlib import Path
@@ -54,6 +56,17 @@ def test_home_page_script_escapes_newline_sequences_for_browser_parsing() -> Non
     assert r"+ ']\n' + m.text" in html
     assert r".join('\n\n')" in html
     assert r"+ '\n\nAgent is thinking…'" in html
+    assert r"codingGoal ? '\n' + codingGoal" in html
+
+
+def test_home_page_inline_script_is_valid_javascript(tmp_path: Path) -> None:
+    html = build_home_page()
+    scripts = re.findall(r"<script>(.*?)</script>", html, flags=re.DOTALL)
+    assert scripts
+    script_path = tmp_path / "home-page.js"
+    script_path.write_text("\n".join(scripts), encoding="utf-8")
+
+    subprocess.run(["node", "--check", str(script_path)], check=True)
 
 
 def test_memory_augmented_prompt_includes_memory_and_latest_request() -> None:
@@ -97,6 +110,8 @@ def test_home_page_includes_paper_coding_workspace() -> None:
 
     assert "Paper Coding Agent" in html
     assert "Paper coding agent" in html
+    assert 'data-mode="coding"' in html
+    assert 'data-mode="research"' in html
     assert 'id="codingWindow"' in html
     assert 'id="paperIdentifier"' in html
     assert 'id="codingGoal"' in html

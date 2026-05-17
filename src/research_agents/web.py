@@ -88,7 +88,7 @@ def build_home_page() -> str:
     """Return the single-page web app HTML."""
 
     suggestions = "\n".join(f"""
-        <button class=\"suggestion\" data-prompt=\"{html.escape(agent['try'], quote=True)}\">
+        <button class=\"suggestion\" data-prompt=\"{html.escape(agent['try'], quote=True)}\" data-mode=\"{html.escape(agent.get('mode', 'research'), quote=True)}\">
           <strong>{html.escape(agent['name'])}</strong>
           <span>{html.escape(agent['role'])}</span>
           <em>Try: {html.escape(agent['try'])}</em>
@@ -444,7 +444,7 @@ def build_home_page() -> str:
       const codingGoal = $('codingGoal').value.trim();
       const ideaStream = $('ideaStream').value.trim();
       if (state.mode === 'coding' && !paperIdentifier) {{ setOutput('Please enter a paper ID or title before running the coding agent.'); return; }}
-      const userLabel = state.mode === 'coding' ? ('Code paper: ' + paperIdentifier + (codingGoal ? '\n' + codingGoal : '')) : (prompt || 'Discover recent conference topics');
+      const userLabel = state.mode === 'coding' ? ('Code paper: ' + paperIdentifier + (codingGoal ? '\\n' + codingGoal : '')) : (prompt || 'Discover recent conference topics');
       remember('user', userLabel);
       setOutput(renderTranscript(currentConversation()) + '\\n\\nAgent is thinking…');
       setAgentRunning(true); $('run').disabled = true;
