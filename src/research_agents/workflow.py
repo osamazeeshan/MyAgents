@@ -3,8 +3,12 @@
 from __future__ import annotations
 
 import asyncio
+import json
+import os
 import re
 import subprocess
+import urllib.error
+import urllib.request
 from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
@@ -134,7 +138,9 @@ new citations. If the user asks for more literature, clearly label suggestions
 as follow-up search leads unless they are present in the supplied verified
 paper set. When the user wants to read a complete paper, find code/datasets,
 or prepare a reproduction repository, explain that the interactive workflow can
-collect the required inputs step by step.
+collect the required inputs step by step, optionally create a GitHub repository,
+clone existing code when the user supplies a URL, and scaffold/test dummy data
+when no user dataset is available yet.
 """
 
 PAPER_READING_INSTRUCTIONS = """
@@ -164,10 +170,11 @@ selected paper, paper-reading notes, code/dataset artifact notes, and the local
 repository preparation result, create an actionable implementation plan. If an
 existing codebase was cloned, explain the repo layout to inspect, environment
 setup, data download steps, smoke tests, and experiment commands. If a scaffold
-was created because no code was available, propose a minimal clean-room
-implementation structure, module responsibilities, pseudocode, tests, and an
-incremental coding checklist. Ask the user for confirmation before each next
-implementation step.
+was created because no code was available, use the generated dummy dataset,
+baseline module, and pytest smoke test as the first runnable checkpoint before
+proposing a minimal clean-room implementation structure, module responsibilities,
+pseudocode, tests, and an incremental coding checklist. Ask the user for
+confirmation before each next implementation step.
 """
 
 CONFERENCE_VENUES = (
@@ -718,10 +725,225 @@ def _safe_repo_name(name: str) -> str:
     return safe or "paper-reproduction"
 
 
-def prepare_reproduction_repository(
-    repo_name: str, code_url: str = "", dataset_url: str = ""
+def create_github_repository(
+    repo_name: str,
+    *,
+    description: str = "",
+    private: bool = False,
+    owner: str = "",
+    token: str | None = None,
 ) -> str:
-    """Clone an existing implementation or create a local scaffold repo."""
+    """Create a GitHub repository and return its browser URL.
+
+    Authentication is intentionally externalized to ``GITHUB_TOKEN`` or
+    ``GH_TOKEN`` so the workflow never prompts for credentials or stores them in
+    generated repositories. Supplying ``owner`` creates an organization repo;
+    leaving it blank creates a repository for the authenticated user.
+    """
+
+    github_token = token or os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN")
+    if not github_token:
+        raise RuntimeError(
+            "GitHub repository creation requires GITHUB_TOKEN or GH_TOKEN with repo permissions."
+        )
+
+    safe_name = _safe_repo_name(repo_name)
+    payload = {
+        "name": safe_name,
+        "description": description or "Research paper reproduction workspace",
+        "private": private,
+        "auto_init": False,
+    }
+    if owner:
+        endpoint = f"https://api.github.com/orgs/{owner.strip()}/repos"
+    else:
+        endpoint = "https://api.github.com/user/repos"
+
+    request = urllib.request.Request(
+        endpoint,
+        data=json.dumps(payload).encode("utf-8"),
+        headers={
+            "Accept": "application/vnd.github+json",
+            "Authorization": f"Bearer {github_token}",
+            "Content-Type": "application/json",
+            "User-Agent": "YourResearchGuide/0.1",
+            "X-GitHub-Api-Version": "2022-11-28",
+        },
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=30) as response:
+            data = json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:  # pragma: no cover - requires live GitHub API
+        detail = exc.read().decode("utf-8", errors="replace")
+        raise RuntimeError(f"GitHub repository creation failed: {exc.code} {detail}") from exc
+    except urllib.error.URLError as exc:  # pragma: no cover - requires network failure
+        raise RuntimeError(f"GitHub repository creation failed: {exc.reason}") from exc
+
+    html_url = data.get("html_url")
+    if not isinstance(html_url, str) or not html_url:
+        raise RuntimeError("GitHub repository creation succeeded but no html_url was returned.")
+    return html_url
+
+
+def _write_dummy_dataset_scaffold(repo_path: Path, repo_title: str) -> None:
+    """Write a runnable clean-room Python scaffold with dummy data and tests."""
+
+    package_dir = repo_path / "src" / "reproduction_baseline"
+    package_dir.mkdir(parents=True, exist_ok=True)
+    (repo_path / "tests").mkdir(exist_ok=True)
+    (repo_path / "data").mkdir(exist_ok=True)
+
+    (repo_path / "README.md").write_text(
+        f"# {repo_title}\n\n"
+        "Clean-room research reproduction scaffold. It includes a tiny dummy "
+        "classification dataset, a baseline implementation, and pytest checks "
+        "so agents can validate code before replacing the placeholder with the "
+        "paper-specific method.\n\n"
+        "## Quick start\n\n"
+        "```bash\n"
+        "python -m venv .venv\n"
+        "source .venv/bin/activate\n"
+        "pip install -e .[test]\n"
+        "pytest\n"
+        "python -m reproduction_baseline data/dummy_dataset.csv\n"
+        "```\n\n"
+        "## Next steps\n\n"
+        "1. Replace or extend `data/dummy_dataset.csv` with the user-provided dataset.\n"
+        "2. Implement the paper method incrementally in `src/reproduction_baseline/`.\n"
+        "3. Add regression tests for preprocessing, training, and evaluation.\n",
+        encoding="utf-8",
+    )
+    (repo_path / "pyproject.toml").write_text(
+        "[build-system]\n"
+        "requires = [\"hatchling>=1.25\"]\n"
+        "build-backend = \"hatchling.build\"\n\n"
+        "[project]\n"
+        f"name = \"{_safe_repo_name(repo_title).lower()}\"\n"
+        "version = \"0.1.0\"\n"
+        "description = \"Clean-room research reproduction scaffold\"\n"
+        "requires-python = \">=3.10\"\n\n"
+        "[project.optional-dependencies]\n"
+        "test = [\"pytest>=8\"]\n\n"
+        "[tool.hatch.build.targets.wheel]\n"
+        "packages = [\"src/reproduction_baseline\"]\n",
+        encoding="utf-8",
+    )
+    (repo_path / ".gitignore").write_text(
+        ".venv/\n__pycache__/\n*.py[cod]\n.pytest_cache/\n.DS_Store\n",
+        encoding="utf-8",
+    )
+    (repo_path / "data" / "dummy_dataset.csv").write_text(
+        "feature_a,feature_b,label\n"
+        "0.10,1.20,negative\n"
+        "0.30,1.00,negative\n"
+        "0.80,0.40,positive\n"
+        "0.90,0.20,positive\n",
+        encoding="utf-8",
+    )
+    (package_dir / "__init__.py").write_text(
+        "\"\"\"Minimal baseline utilities for a paper reproduction scaffold.\"\"\"\n\n"
+        "from .baseline import DatasetSummary, load_dataset, majority_label\n\n"
+        "__all__ = [\"DatasetSummary\", \"load_dataset\", \"majority_label\"]\n",
+        encoding="utf-8",
+    )
+    (package_dir / "baseline.py").write_text(
+        "\"\"\"Dummy-dataset baseline used to smoke-test reproduction work.\"\"\"\n\n"
+        "from __future__ import annotations\n\n"
+        "import csv\n"
+        "from dataclasses import dataclass\n"
+        "from pathlib import Path\n\n\n"
+        "@dataclass(frozen=True)\n"
+        "class DatasetSummary:\n"
+        "    rows: int\n"
+        "    labels: tuple[str, ...]\n"
+        "    majority: str\n\n\n"
+        "def load_dataset(path: str | Path) -> list[dict[str, str]]:\n"
+        "    with Path(path).open(newline=\"\", encoding=\"utf-8\") as handle:\n"
+        "        return list(csv.DictReader(handle))\n\n\n"
+        "def majority_label(rows: list[dict[str, str]], label_column: str = \"label\") -> DatasetSummary:\n"
+        "    if not rows:\n"
+        "        raise ValueError(\"dataset must contain at least one row\")\n"
+        "    counts: dict[str, int] = {}\n"
+        "    for row in rows:\n"
+        "        label = row[label_column]\n"
+        "        counts[label] = counts.get(label, 0) + 1\n"
+        "    majority = sorted(counts.items(), key=lambda item: (-item[1], item[0]))[0][0]\n"
+        "    return DatasetSummary(rows=len(rows), labels=tuple(sorted(counts)), majority=majority)\n\n\n"
+        "def main() -> None:\n"
+        "    import argparse\n\n"
+        "    parser = argparse.ArgumentParser(description=\"Summarize a reproduction dataset.\")\n"
+        "    parser.add_argument(\"dataset\", type=Path)\n"
+        "    args = parser.parse_args()\n"
+        "    print(majority_label(load_dataset(args.dataset)))\n\n\n"
+        "if __name__ == \"__main__\":\n"
+        "    main()\n",
+        encoding="utf-8",
+    )
+    (repo_path / "tests" / "test_baseline.py").write_text(
+        "from pathlib import Path\n\n"
+        "from reproduction_baseline import load_dataset, majority_label\n\n\n"
+        "def test_dummy_dataset_majority_label() -> None:\n"
+        "    dataset = Path(__file__).resolve().parents[1] / \"data\" / \"dummy_dataset.csv\"\n"
+        "    rows = load_dataset(dataset)\n"
+        "    summary = majority_label(rows)\n\n"
+        "    assert summary.rows == 4\n"
+        "    assert summary.labels == (\"negative\", \"positive\")\n"
+        "    assert summary.majority == \"negative\"\n",
+        encoding="utf-8",
+    )
+
+
+def _commit_scaffold(repo_path: Path) -> None:
+    """Create an initial local commit for generated scaffolds."""
+
+    subprocess.run(["git", "add", "."], cwd=repo_path, check=True, capture_output=True, text=True)
+    subprocess.run(
+        [
+            "git",
+            "-c",
+            "user.name=YourResearchGuide",
+            "-c",
+            "user.email=yourresearchguide@example.com",
+            "commit",
+            "-m",
+            "Initial reproduction scaffold",
+        ],
+        cwd=repo_path,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+
+def _add_github_remote(repo_path: Path, github_url: str) -> str:
+    """Add a GitHub remote and return the remote name used."""
+
+    remotes = subprocess.run(
+        ["git", "remote"], cwd=repo_path, check=True, capture_output=True, text=True
+    ).stdout.split()
+    remote_name = "origin" if "origin" not in remotes else "github"
+    if remote_name not in remotes:
+        subprocess.run(
+            ["git", "remote", "add", remote_name, github_url],
+            cwd=repo_path,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    return remote_name
+
+
+def prepare_reproduction_repository(
+    repo_name: str,
+    code_url: str = "",
+    dataset_url: str = "",
+    github_repo: str = "",
+    github_private: bool = False,
+    github_owner: str = "",
+    github_create_func: Callable[..., str] | None = None,
+) -> str:
+    """Clone existing code or create a tested scaffold, then optionally create GitHub."""
 
     REPRODUCTION_REPOS_DIR.mkdir(parents=True, exist_ok=True)
     repo_path = REPRODUCTION_REPOS_DIR / _safe_repo_name(repo_name)
@@ -730,6 +952,8 @@ def prepare_reproduction_repository(
 
     code_url = code_url.strip()
     dataset_url = dataset_url.strip()
+    github_repo = github_repo.strip()
+    actions: list[str] = []
     if code_url:
         subprocess.run(
             ["git", "clone", code_url, str(repo_path)],
@@ -737,32 +961,41 @@ def prepare_reproduction_repository(
             capture_output=True,
             text=True,
         )
-        action = f"Cloned existing implementation from {code_url}."
+        actions.append(f"Cloned existing implementation from {code_url}.")
     else:
         repo_path.mkdir(parents=True, exist_ok=True)
-        (repo_path / "README.md").write_text(
-            "# Paper Reproduction\n\n"
-            "This scaffold was created because no existing code URL was selected.\n\n"
-            "## Next steps\n\n"
-            "1. Add paper-reading notes.\n"
-            "2. Implement the method incrementally.\n"
-            "3. Add tests and reproducible experiment commands.\n",
-            encoding="utf-8",
-        )
-        (repo_path / "src").mkdir(exist_ok=True)
-        (repo_path / "tests").mkdir(exist_ok=True)
-        (repo_path / "data").mkdir(exist_ok=True)
-        (repo_path / "data" / ".gitkeep").write_text("", encoding="utf-8")
+        _write_dummy_dataset_scaffold(repo_path, _safe_repo_name(repo_name))
         subprocess.run(["git", "init"], cwd=repo_path, check=True, capture_output=True, text=True)
-        action = "Created a new clean-room scaffold repository."
+        _commit_scaffold(repo_path)
+        actions.append(
+            "Created a new clean-room scaffold repository with dummy data, baseline code, and tests."
+        )
 
     if dataset_url:
         (repo_path / "DATASET.md").write_text(
             f"# Dataset\n\nSelected dataset URL or instructions:\n\n{dataset_url}\n",
             encoding="utf-8",
         )
+        actions.append("Saved dataset notes in DATASET.md.")
 
-    return f"{action}\nLocal path: {repo_path}"
+    if github_repo:
+        create_func = github_create_func or create_github_repository
+        github_url = create_func(
+            github_repo,
+            description=f"Research reproduction workspace for {repo_name}",
+            private=github_private,
+            owner=github_owner,
+        )
+        remote_name = _add_github_remote(repo_path, github_url)
+        actions.append(
+            f"Created GitHub repository {github_url} and added it as remote '{remote_name}'."
+        )
+        actions.append(
+            "Push when ready with: "
+            f"git -C {repo_path} push -u {remote_name} HEAD:main"
+        )
+
+    return "\n".join([*actions, f"Local path: {repo_path}"])
 
 
 def format_reproduction_prompt(
@@ -889,24 +1122,44 @@ async def _run_reproduction_sequence(
         "Existing code URL to clone (press Enter if no implementation is available): "
     ).strip()
     dataset_url = input_func(
-        "Dataset URL or setup notes (press Enter if unknown/not needed yet): "
+        "Dataset URL or setup notes (press Enter to use the dummy dataset scaffold): "
     ).strip()
     repo_name = input_func(
         "Local repo directory name under reproduction_repos/: "
     ).strip()
+    github_repo = input_func(
+        "GitHub repo name to create (press Enter to skip GitHub creation): "
+    ).strip()
+    github_owner = ""
+    github_private = False
+    if github_repo:
+        github_owner = input_func(
+            "GitHub organization/user owner (press Enter for the authenticated user): "
+        ).strip()
+        github_private = input_func(
+            "Make the GitHub repo private? [y/N]: "
+        ).strip().lower() in {"y", "yes"}
     if not repo_name:
         repo_name = _safe_repo_name(paper_request)
 
     summary = (
         f"Prepare repo '{repo_name}'"
-        + (f" by cloning {code_url}" if code_url else " as a new scaffold")
+        + (f" by cloning {code_url}" if code_url else " as a new scaffold with dummy data/tests")
         + (f" with dataset notes from {dataset_url}" if dataset_url else "")
+        + (f" and create GitHub repo {github_repo}" if github_repo else "")
     )
     confirmation = input_func(f"Confirm this step? {summary} [y/N]: ").strip().lower()
     if confirmation not in {"y", "yes"}:
         return "Repository preparation cancelled by user before any local changes."
 
-    repo_result = prepare_reproduction_repository(repo_name, code_url, dataset_url)
+    repo_result = prepare_reproduction_repository(
+        repo_name,
+        code_url,
+        dataset_url,
+        github_repo=github_repo,
+        github_private=github_private,
+        github_owner=github_owner,
+    )
     output_func("\n# Reproduction Repository Preparation\n")
     output_func(repo_result)
 

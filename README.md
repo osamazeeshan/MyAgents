@@ -71,11 +71,15 @@ paper to inspect plus any PDF URL, paper URL, abstract, or text excerpt you want
 to provide for grounding. Ask to `find code/data` and a code-and-dataset scout
 looks for implementation repositories, project pages, model cards, and datasets.
 Ask to `create repo` and the workflow asks for the target paper, an optional
-existing code URL to clone, optional dataset notes, a local repo name, and a
-final confirmation before it creates anything under `reproduction_repos/`. If a
-code URL is supplied it runs `git clone`; otherwise it creates a clean-room
-scaffold and then asks the reproduction planner to propose the next confirmed
-implementation steps.
+existing code URL to clone, optional dataset notes, a local repo name, and an
+optional GitHub repository to create before a final confirmation. If a code URL
+is supplied it runs `git clone`; otherwise it creates a clean-room scaffold under
+`reproduction_repos/` with baseline Python code, a dummy CSV dataset, and pytest
+smoke tests. GitHub creation uses the GitHub REST API with `GITHUB_TOKEN` or
+`GH_TOKEN`, adds the new repository as a git remote, and prints the push command
+so you can publish the scaffold or cloned work when ready. The reproduction
+planner then proposes the next confirmed implementation steps, including how to
+replace the dummy dataset with a user-provided dataset when available.
 
 ### Run against a local model on a Mac M2 with 16GB RAM
 
