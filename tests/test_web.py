@@ -1,9 +1,11 @@
+import http.client
 import sys
+import threading
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from research_agents.web import build_home_page, format_memory_augmented_prompt
+from research_agents.web import build_home_page, create_server, format_memory_augmented_prompt
 
 
 def test_home_page_contains_persistent_memory_layout() -> None:
@@ -16,6 +18,9 @@ def test_home_page_contains_persistent_memory_layout() -> None:
     assert "STORAGE_KEY" in html
     assert "yourresearchguide.conversations.v1" in html
     assert "memory: memoryContext()" in html
+    assert 'href="/favicon.ico"' in html
+    assert ".conversation-list { display: grid; gap: 10px; overflow-y: auto;" in html
+    assert ".suggestions { display: grid; gap: 12px; overflow-y: auto;" in html
 
 
 def test_memory_augmented_prompt_includes_memory_and_latest_request() -> None:
@@ -29,3 +34,22 @@ def test_memory_augmented_prompt_includes_memory_and_latest_request() -> None:
 
 def test_memory_augmented_prompt_leaves_empty_memory_unchanged() -> None:
     assert format_memory_augmented_prompt("Fresh question", "") == "Fresh question"
+
+
+def test_favicon_route_returns_svg_icon() -> None:
+    server = create_server(port=0)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        conn = http.client.HTTPConnection(server.server_address[0], server.server_address[1], timeout=2)
+        conn.request("GET", "/favicon.ico")
+        response = conn.getresponse()
+        body = response.read().decode("utf-8")
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+
+    assert response.status == 200
+    assert response.getheader("Content-Type") == "image/svg+xml; charset=utf-8"
+    assert "<svg" in body
