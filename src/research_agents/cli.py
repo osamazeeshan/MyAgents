@@ -50,6 +50,27 @@ def parse_args() -> argparse.Namespace:
         ),
     )
     parser.add_argument(
+        "--web",
+        action="store_true",
+        help="Launch Agentarium, the web interface for the research agents.",
+    )
+    parser.add_argument(
+        "--web-host",
+        default="127.0.0.1",
+        help="Host to bind when using --web (default: 127.0.0.1).",
+    )
+    parser.add_argument(
+        "--web-port",
+        type=int,
+        default=8765,
+        help="Port to bind when using --web (default: 8765).",
+    )
+    parser.add_argument(
+        "--open-browser",
+        action="store_true",
+        help="Open Agentarium in the default browser when using --web.",
+    )
+    parser.add_argument(
         "--conference-review",
         action="store_true",
         help=(
@@ -58,9 +79,9 @@ def parse_args() -> argparse.Namespace:
         ),
     )
     args = parser.parse_args()
-    if not args.prompt and not (args.list_local_models or args.conference_review):
+    if not args.prompt and not (args.list_local_models or args.conference_review or args.web):
         parser.error(
-            "prompt is required unless --list-local-models or --conference-review is used"
+            "prompt is required unless --list-local-models, --conference-review, or --web is used"
         )
     return args
 
@@ -69,6 +90,12 @@ def main() -> None:
     args = parse_args()
     if args.list_local_models:
         print(format_local_model_presets())
+        return
+
+    if args.web:
+        from .web import run_server
+
+        run_server(args.web_host, args.web_port, open_browser=args.open_browser)
         return
 
     if args.plan_only:

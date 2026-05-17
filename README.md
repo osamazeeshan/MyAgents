@@ -30,6 +30,31 @@ the session. You can force the same behavior outside a TTY with `--interactive`:
 research-agents --interactive "Map the current debates around retrieval-augmented generation evaluation."
 ```
 
+
+### Agentarium web interface
+
+Prefer a browser instead of the terminal? Launch **Agentarium**, a single-page web console for the research-agent crew:
+
+```bash
+research-agents --web
+# or
+research-agents-web --open
+```
+
+Agentarium is the suggested name for the interface: it frames the app as a glasshouse/observatory where the orchestrator, planner, literature scout, critical reviewer, and conference-review crew can grow ideas together. The UI includes launchpad prompts, runtime model/provider status, local model presets, and four agent modes:
+
+- **Ask the agent crew** for the standard orchestrated research workflow.
+- **Discover conference topics** for recent top-venue topic scouting.
+- **Review selected topic** to run focused paper search plus the two-reviewer critical literature review.
+- **Conference follow-up** for grounded questions after a review.
+
+Bind a different host or port when needed:
+
+```bash
+research-agents --web --web-host 0.0.0.0 --web-port 9000
+research-agents-web --host 0.0.0.0 --port 9000
+```
+
 ### Interactive top-conference literature review
 
 Run the conference-review workflow when you want an agent to search recent topics from venues such as NeurIPS, ICML, ICLR, AAAI, CVPR, ECCV, ICCV, and WACV. The topic-discovery step is limited to the current year and one year before it; on May 16, 2026, that means 2026 and 2025. The discovery output ends with one numbered topic-selection menu. Before selecting, you can ask natural follow-up questions such as expanding a cluster or refining a section; the topic scout answers and returns you to selection. When you enter a number, the CLI resolves it to the matching topic before searching the web and scholarly indexes. The focused paper search then returns no more than 20 recent and/or highly cited verified papers from roughly the last 5-6 years, and two LLM reviewer agents produce independent critical analyses, limitations, and possible future directions.
