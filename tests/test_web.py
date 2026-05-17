@@ -16,7 +16,8 @@ def test_home_page_contains_persistent_memory_layout() -> None:
     html = build_home_page()
 
     assert "ResearchAgent" in html
-    assert "Saved conversations" in html
+    assert "Recent" in html
+    assert "Saved conversations" not in html
     assert "Agent launchpads" in html
     assert 'id="modelChoice"' in html
     assert "model: selectedModel()" in html
@@ -29,8 +30,15 @@ def test_home_page_contains_persistent_memory_layout() -> None:
     assert "agent-running-logo" in html
     assert "setAgentRunning(true)" in html
     assert "setAgentRunning(false)" in html
-    assert ".conversation-list { display: grid; gap: 10px; overflow-y: auto;" in html
+    assert ".conversation-list { display: grid; align-content: start; gap: 8px; overflow-y: auto;" in html
     assert ".suggestions { display: grid; gap: 12px; overflow-y: auto;" in html
+    assert ".launchpad-panel { overflow: hidden; padding: 22px; gap: 14px; }" in html
+    assert ".help-icon::after" in html
+    assert "top: calc(100% + 9px)" in html
+    assert ".workspace.card { background: transparent; border-color: transparent; box-shadow: none; backdrop-filter: none; padding: 0; }" in html
+    assert "Choose a model before running agents. Local presets use your configured OpenAI-compatible provider." in html
+    assert 'id="provider"' not in html
+    assert 'id="notes"' not in html
 
 
 def test_home_page_script_escapes_newline_sequences_for_browser_parsing() -> None:
