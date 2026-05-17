@@ -3,12 +3,18 @@
 from __future__ import annotations
 
 import os
+from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass
 from pathlib import Path
 
-
 DEFAULT_LOCAL_BASE_URL = "http://localhost:11434/v1"
 DEFAULT_LOCAL_API_KEY = "ollama"
+
+_MODEL_OVERRIDE: ContextVar[str | None] = ContextVar(
+    "research_agents_model_override", default=None
+)
+
 
 LOCAL_MODEL_PRESETS: dict[str, dict[str, str]] = {
     "fast-small": {
@@ -97,6 +103,27 @@ def format_local_model_presets() -> str:
     return "\n".join(rows)
 
 
+def model_choices() -> dict[str, str]:
+    """Return UI-selectable model names mapped to provider-specific identifiers."""
+
+    choices = {ResearchAgentSettings.model: ResearchAgentSettings.model}
+    choices.update(
+        {preset: details["model"] for preset, details in LOCAL_MODEL_PRESETS.items()}
+    )
+    return choices
+
+
+@contextmanager
+def selected_model(model_or_preset: str | None):
+    """Temporarily override the configured model for the current request context."""
+
+    token = _MODEL_OVERRIDE.set(model_or_preset.strip() if model_or_preset else None)
+    try:
+        yield
+    finally:
+        _MODEL_OVERRIDE.reset(token)
+
+
 def _truthy(value: str | None) -> bool:
     return value is not None and value.strip().lower() in {"1", "true", "yes", "on"}
 
@@ -107,7 +134,7 @@ def load_settings() -> ResearchAgentSettings:
     provider = os.getenv("RESEARCH_AGENTS_PROVIDER", "openai").strip().lower()
     local_mode = provider in {"local", "ollama", "lmstudio", "llama.cpp", "llamacpp"}
     model_from_env = os.getenv("RESEARCH_AGENTS_MODEL", ResearchAgentSettings.model)
-    model = resolve_model_name(model_from_env)
+    model = resolve_model_name(_MODEL_OVERRIDE.get() or model_from_env)
 
     if local_mode:
         return ResearchAgentSettings(

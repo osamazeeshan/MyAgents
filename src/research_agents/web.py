@@ -14,9 +14,14 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
 from urllib.parse import urlparse
 
-from .config import format_local_model_presets, load_settings
+from .config import (
+    format_local_model_presets,
+    load_settings,
+    model_choices,
+    selected_model,
+)
 
-APP_NAME = "YourResearchGuide"
+APP_NAME = "ResearchAgent"
 APP_TAGLINE = "A glasshouse for research agents, paper scouts, and critical reviewers."
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8765
@@ -58,20 +63,33 @@ AGENT_SUGGESTIONS = [
 ]
 
 
+def build_model_options() -> str:
+    """Return HTML options for the model selector."""
+
+    settings = load_settings()
+    options: list[str] = []
+    for label, resolved in model_choices().items():
+        selected = " selected" if resolved == settings.model else ""
+        option_label = label if label == resolved else f"{label} · {resolved}"
+        options.append(
+            f'<option value="{html.escape(label, quote=True)}"{selected}>'
+            f"{html.escape(option_label)}</option>"
+        )
+    return "\n".join(options)
+
+
 def build_home_page() -> str:
     """Return the single-page web app HTML."""
 
-    suggestions = "\n".join(
-        f"""
+    suggestions = "\n".join(f"""
         <button class=\"suggestion\" data-prompt=\"{html.escape(agent['try'], quote=True)}\">
           <strong>{html.escape(agent['name'])}</strong>
           <span>{html.escape(agent['role'])}</span>
           <em>Try: {html.escape(agent['try'])}</em>
         </button>
-        """.strip()
-        for agent in AGENT_SUGGESTIONS
-    )
+        """.strip() for agent in AGENT_SUGGESTIONS)
     local_models = html.escape(format_local_model_presets())
+    model_options = build_model_options()
     return f"""<!doctype html>
 <html lang=\"en\">
 <head>
@@ -106,10 +124,9 @@ def build_home_page() -> str:
         var(--bg);
       color: var(--text);
     }}
-    button, textarea, input {{ font: inherit; }}
+    button, textarea, input, select {{ font: inherit; }}
     button:disabled {{ opacity: .6; cursor: wait; }}
-    .shell {{ width: min(1440px, calc(100vw - 28px)); height: 100vh; margin: 0 auto; padding: 16px 0; display: flex; flex-direction: column; gap: 14px; }}
-    header {{ display: grid; grid-template-columns: 1fr auto; gap: 14px; align-items: stretch; flex: 0 0 auto; }}
+    .shell {{ width: min(1440px, calc(100vw - 28px)); height: 100vh; margin: 0 auto; padding: 16px 0; display: flex; flex-direction: column; }}
     .hero, .card {{
       border: 1px solid var(--border);
       background: var(--panel);
@@ -123,12 +140,16 @@ def build_home_page() -> str:
       background: linear-gradient(90deg, transparent, rgba(124,247,212,.28), transparent);
       transform: rotate(-8deg); filter: blur(20px);
     }}
-    h1 {{ font-size: clamp(30px, 4vw, 48px); line-height: .95; margin: 0 0 4px; letter-spacing: -.06em; }}
-    .tagline {{ color: var(--muted); font-size: 15px; line-height: 1.3; max-width: 860px; margin: 0; }}
-    .status {{ padding: 12px; display: grid; grid-template-columns: repeat(3, minmax(105px, 1fr)); gap: 8px; min-width: 390px; align-content: center; }}
+    h1 {{ font-size: clamp(22px, 2.2vw, 30px); line-height: 1; margin: 0 0 6px; letter-spacing: -.04em; }}
+    .tagline {{ color: var(--muted); font-size: 12px; line-height: 1.35; margin: 0; }}
+    .status {{ display: grid; grid-template-columns: 1fr; gap: 8px; margin-top: 14px; flex: 0 0 auto; }}
     .pill {{ display: grid; gap: 2px; color: var(--muted); border: 1px solid var(--border); border-radius: 14px; padding: 8px 10px; min-width: 0; }}
     .pill b {{ color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }}
-    .status .hint {{ grid-column: 1 / -1; line-height: 1.25; }}
+    .status .hint {{ line-height: 1.25; }}
+    .model-select {{ display: grid; gap: 6px; }}
+    .model-select label {{ color: var(--muted); font-size: 13px; }}
+    select {{ width: 100%; border: 1px solid var(--border); background: rgba(5,8,24,.86); color: var(--text); border-radius: 14px; padding: 10px 12px; outline: none; }}
+    select:focus {{ border-color: var(--accent); box-shadow: 0 0 0 4px rgba(124,247,212,.12); }}
     main {{ flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: 300px minmax(0, 1fr) 330px; gap: 18px; }}
     .card {{ padding: 18px; min-height: 0; }}
     h2 {{ margin: 0 0 12px; font-size: 20px; }}
@@ -137,13 +158,13 @@ def build_home_page() -> str:
     .panel-actions {{ display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; }}
     .conversation-list {{ display: grid; gap: 10px; overflow-y: auto; overflow-x: hidden; flex: 1 1 auto; min-height: 0; padding-right: 4px; }}
     .conversation {{
-      text-align: left; border: 1px solid var(--border); border-radius: 16px; padding: 12px;
-      color: var(--text); background: rgba(255,255,255,.055); cursor: pointer; transition: .2s ease;
+      width: 100%; max-width: 100%; aspect-ratio: 1 / 1; text-align: left; border: 1px solid var(--border); border-radius: 16px; padding: 12px;
+      color: var(--text); background: rgba(255,255,255,.055); cursor: pointer; transition: .2s ease; overflow: hidden;
     }}
     .conversation.active {{ border-color: var(--accent); background: rgba(124,247,212,.12); }}
     .conversation strong, .conversation span {{ display: block; }}
     .conversation strong {{ white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }}
-    .conversation span {{ color: var(--muted); font-size: 12px; margin-top: 5px; }}
+    .conversation span {{ color: var(--muted); font-size: 12px; margin-top: 5px; overflow-wrap: anywhere; }}
     .memory-summary {{ color: var(--muted); font-size: 13px; line-height: 1.45; border-top: 1px solid var(--border); margin-top: 14px; padding-top: 14px; }}
     .suggestions {{ display: grid; gap: 12px; overflow-y: auto; overflow-x: hidden; flex: 1 1 auto; min-height: 0; padding-right: 4px; }}
     .suggestion {{
@@ -198,7 +219,7 @@ def build_home_page() -> str:
     @media (max-width: 1180px) {{
       body {{ overflow: auto; }}
       .shell {{ height: auto; min-height: 100vh; }}
-      header, main {{ grid-template-columns: 1fr; }}
+      main {{ grid-template-columns: 1fr; }}
       .status {{ min-width: 0; }}
       .workspace {{ min-height: 720px; }}
     }}
@@ -206,62 +227,66 @@ def build_home_page() -> str:
   </style>
 </head>
 <body>
-  <div class=\"shell\">
-    <header>
-      <section class=\"hero\">
-        <h1>{APP_NAME}</h1>
-        <p class=\"tagline\">{APP_TAGLINE}</p>
-      </section>
-      <aside class=\"card status\" id=\"status\">
-        <div class=\"pill\"><span>Provider</span><b id=\"provider\">loading…</b></div>
-        <div class=\"pill\"><span>Model</span><b id=\"model\">loading…</b></div>
-        <div class=\"pill\"><span>Notes</span><b id=\"notes\">loading…</b></div>
-        <div class=\"hint\">Tip: use <code>RESEARCH_AGENTS_PROVIDER=ollama</code> and <code>RESEARCH_AGENTS_MODEL=balanced</code> for local model testing.</div>
-      </aside>
-    </header>
+  <div class="shell">
     <main>
-      <aside class=\"card memory-panel\">
+      <aside class="card memory-panel">
+        <section class="hero">
+          <h1>{APP_NAME}</h1>
+          <p class="tagline">{APP_TAGLINE}</p>
+        </section>
         <h2>Saved conversations</h2>
-        <div class=\"panel-actions\">
-          <button class=\"secondary\" id=\"newChat\">New chat</button>
-          <button class=\"secondary\" id=\"deleteChat\">Delete</button>
+        <div class="panel-actions">
+          <button class="secondary" id="newChat">New chat</button>
+          <button class="secondary" id="deleteChat">Delete</button>
         </div>
-        <div class=\"conversation-list\" id=\"conversationList\"></div>
-        <div class=\"memory-summary\" id=\"memorySummary\">Memory is ready. Start a chat to save your prompts.</div>
+        <div class="conversation-list" id="conversationList"></div>
+        <div class="memory-summary" id="memorySummary">Memory is ready. Start a chat to save your prompts.</div>
+        <aside class="status" id="status" aria-label="Runtime settings">
+          <div class="pill"><span>Provider</span><b id="provider">loading…</b></div>
+          <div class="model-select">
+            <label for="modelChoice">Model</label>
+            <select id="modelChoice">{model_options}</select>
+          </div>
+          <div class="pill"><span>Active model</span><b id="model">loading…</b></div>
+          <div class="pill"><span>Notes</span><b id="notes">loading…</b></div>
+          <div class="hint">Choose a model before running agents. Local presets use your configured OpenAI-compatible provider.</div>
+        </aside>
       </aside>
-      <section class=\"card workspace\">
-        <div class=\"output\" id=\"output\"><span class=\"empty\">Your saved transcript and new agent output will appear here.</span></div>
-        <div class=\"composer\">
-          <div class=\"modebar\" aria-label=\"Agent actions\">
-            <button class=\"mode active\" data-mode=\"research\">Ask the agent crew</button>
-            <button class=\"mode\" data-mode=\"discover\">Discover conference topics</button>
-            <button class=\"mode\" data-mode=\"review\">Review selected topic</button>
-            <button class=\"mode\" data-mode=\"followup\">Conference follow-up</button>
+      <section class="card workspace">
+        <div class="output" id="output"><span class="empty">Your saved transcript and new agent output will appear here.</span></div>
+        <div class="composer">
+          <div class="modebar" aria-label="Agent actions">
+            <button class="mode active" data-mode="research">Ask the agent crew</button>
+            <button class="mode" data-mode="discover">Discover conference topics</button>
+            <button class="mode" data-mode="review">Review selected topic</button>
+            <button class="mode" data-mode="followup">Conference follow-up</button>
           </div>
-          <div class=\"conference-fields\" id=\"conferenceFields\">
-            <input id=\"topic\" placeholder=\"Selected topic (required for review/follow-up)\" />
-            <textarea id=\"context\" placeholder=\"Discovery, paper, or review context. YourResearchGuide stores the latest output here automatically.\"></textarea>
+          <div class="conference-fields" id="conferenceFields">
+            <input id="topic" placeholder="Selected topic (required for review/follow-up)" />
+            <textarea id="context" placeholder="Discovery, paper, or review context. ResearchAgent stores the latest output here automatically."></textarea>
           </div>
-          <textarea id=\"prompt\" placeholder=\"Ask a research question, describe a topic, or paste a follow-up…\"></textarea>
-          <div class=\"actions\">
-            <button class=\"primary\" id=\"run\">Run agents</button>
-            <button class=\"secondary\" id=\"clear\">Clear input</button>
-            <button class=\"secondary\" id=\"restore\">Restore latest</button>
-            <span class=\"agent-running\" id=\"agentRunning\" role=\"status\" aria-live=\"polite\" aria-hidden=\"true\"><span class=\"agent-running-logo\" aria-hidden=\"true\"></span><span id=\"busy\">Agents idle</span></span>
-            <span class=\"memory-pill\" id=\"memoryState\">Memory on</span>
+          <textarea id="prompt" placeholder="Ask a research question, describe a topic, or paste a follow-up…"></textarea>
+          <div class="actions">
+            <button class="primary" id="run">Run agents</button>
+            <button class="secondary" id="clear">Clear input</button>
+            <button class="secondary" id="restore">Restore latest</button>
+            <span class="agent-running" id="agentRunning" role="status" aria-live="polite" aria-hidden="true"><span class="agent-running-logo" aria-hidden="true"></span><span id="busy">Agents idle</span></span>
+            <span class="memory-pill" id="memoryState">Memory on</span>
           </div>
         </div>
       </section>
-      <aside class=\"card launchpad-panel\">
+      <aside class="card launchpad-panel">
         <h2>Agent launchpads</h2>
-        <div class=\"suggestions\">{suggestions}</div>
+        <div class="suggestions">{suggestions}</div>
         <details><summary>Local model presets</summary><pre>{local_models}</pre></details>
       </aside>
     </main>
   </div>
+
   <script>
-    const STORAGE_KEY = 'yourresearchguide.conversations.v1';
-    const LEGACY_STORAGE_KEY = 'agentarium.conversations.v1';
+    const STORAGE_KEY = 'researchagent.conversations.v1';
+    const LEGACY_STORAGE_KEY = 'yourresearchguide.conversations.v1';
+    const ANCIENT_STORAGE_KEY = 'agentarium.conversations.v1';
     const state = {{ mode: 'research', lastDiscovery: '', lastPaperContext: '', lastReview: '', conversations: [], currentId: '' }};
     const $ = (id) => document.getElementById(id);
     const output = $('output');
@@ -272,7 +297,7 @@ def build_home_page() -> str:
       return {{ id: String(Date.now()), title: 'New research chat', createdAt, updatedAt: createdAt, messages: [], lastDiscovery: '', lastPaperContext: '', lastReview: '' }};
     }}
     function loadConversations() {{
-      const stored = localStorage.getItem(STORAGE_KEY) || localStorage.getItem(LEGACY_STORAGE_KEY) || '[]';
+      const stored = localStorage.getItem(STORAGE_KEY) || localStorage.getItem(LEGACY_STORAGE_KEY) || localStorage.getItem(ANCIENT_STORAGE_KEY) || '[]';
       try {{ state.conversations = JSON.parse(stored); }}
       catch (_) {{ state.conversations = []; }}
       if (!Array.isArray(state.conversations) || state.conversations.length === 0) state.conversations = [newConversation()];
@@ -325,6 +350,7 @@ def build_home_page() -> str:
       indicator.setAttribute('aria-hidden', isRunning ? 'false' : 'true');
       $('busy').textContent = isRunning ? 'Agents running…' : 'Agents idle';
     }}
+    function selectedModel() {{ return $('modelChoice').value; }}
     function memoryContext() {{
       const chat = currentConversation();
       return chat.messages.slice(-12).map(m => (m.role === 'user' ? 'User' : 'Agent') + ': ' + m.text).join('\\n\\n');
@@ -367,19 +393,20 @@ def build_home_page() -> str:
       setAgentRunning(true); $('run').disabled = true;
       try {{
         if (state.mode === 'research') {{
-          const data = await postJSON('/api/research', {{ prompt, memory: memoryContext() }}); remember('agent', data.output); setOutput(renderTranscript(currentConversation()));
+          const data = await postJSON('/api/research', {{ prompt, memory: memoryContext(), model: selectedModel() }}); remember('agent', data.output); setOutput(renderTranscript(currentConversation()));
         }} else if (state.mode === 'discover') {{
-          const data = await postJSON('/api/conference/discover', {{ prompt, memory: memoryContext() }}); state.lastDiscovery = data.output; const chat = currentConversation(); chat.lastDiscovery = data.output; $('context').value = data.output; remember('agent', data.output); setOutput(renderTranscript(currentConversation()));
+          const data = await postJSON('/api/conference/discover', {{ prompt, memory: memoryContext(), model: selectedModel() }}); state.lastDiscovery = data.output; const chat = currentConversation(); chat.lastDiscovery = data.output; $('context').value = data.output; remember('agent', data.output); setOutput(renderTranscript(currentConversation()));
         }} else if (state.mode === 'review') {{
-          const data = await postJSON('/api/conference/review', {{ topic: topic || prompt, discovery_context: context, memory: memoryContext() }});
+          const data = await postJSON('/api/conference/review', {{ topic: topic || prompt, discovery_context: context, memory: memoryContext(), model: selectedModel() }});
           state.lastPaperContext = data.paper_context; state.lastReview = data.review; const chat = currentConversation(); chat.lastPaperContext = data.paper_context; chat.lastReview = data.review; $('context').value = data.paper_context + '\\n\\n' + data.review; remember('agent', data.paper_context + '\\n\\n' + data.review); setOutput(renderTranscript(currentConversation()));
         }} else {{
-          const data = await postJSON('/api/conference/follow-up', {{ question: prompt, selected_topic: topic, paper_context: state.lastPaperContext || context, review_context: state.lastReview || context, memory: memoryContext() }});
+          const data = await postJSON('/api/conference/follow-up', {{ question: prompt, selected_topic: topic, paper_context: state.lastPaperContext || context, review_context: state.lastReview || context, memory: memoryContext(), model: selectedModel() }});
           remember('agent', data.output); appendOutput('Follow-up: ' + prompt, data.output);
         }}
       }} catch (err) {{ const message = 'Error: ' + err.message; remember('agent', message); setOutput(renderTranscript(currentConversation())); }}
       finally {{ setAgentRunning(false); $('run').disabled = false; $('prompt').value = ''; }}
     }});
+    $('modelChoice').addEventListener('change', () => {{ $('model').textContent = $('modelChoice').selectedOptions[0].textContent.split(' · ').pop(); }});
     loadConversations();
     fetch('/api/health').then(r => r.json()).then(data => {{ $('provider').textContent = data.provider; $('model').textContent = data.model; $('notes').textContent = data.notes_dir; }});
   </script>
@@ -387,7 +414,9 @@ def build_home_page() -> str:
 </html>"""
 
 
-def _json_response(handler: BaseHTTPRequestHandler, status: HTTPStatus, payload: dict[str, Any]) -> None:
+def _json_response(
+    handler: BaseHTTPRequestHandler, status: HTTPStatus, payload: dict[str, Any]
+) -> None:
     body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
     handler.send_response(status)
     handler.send_header("Content-Type", "application/json; charset=utf-8")
@@ -396,7 +425,9 @@ def _json_response(handler: BaseHTTPRequestHandler, status: HTTPStatus, payload:
     handler.wfile.write(body)
 
 
-def _asset_response(handler: BaseHTTPRequestHandler, body: bytes, content_type: str) -> None:
+def _asset_response(
+    handler: BaseHTTPRequestHandler, body: bytes, content_type: str
+) -> None:
     handler.send_response(HTTPStatus.OK)
     handler.send_header("Content-Type", content_type)
     handler.send_header("Content-Length", str(len(body)))
@@ -448,6 +479,14 @@ def format_memory_augmented_prompt(prompt: str, memory: str) -> str:
 async def handle_api_request(path: str, payload: dict[str, Any]) -> dict[str, Any]:
     """Route a JSON API request to the appropriate agent workflow."""
 
+    model_override = _optional_text(payload, "model")
+    with selected_model(model_override):
+        return await _handle_api_request(path, payload)
+
+
+async def _handle_api_request(path: str, payload: dict[str, Any]) -> dict[str, Any]:
+    """Route a JSON API request with runtime overrides already applied."""
+
     if path == "/api/research":
         from .workflow import run_research_workflow
 
@@ -473,7 +512,9 @@ async def handle_api_request(path: str, payload: dict[str, Any]) -> dict[str, An
             raise ValueError("'discovery_context' must be a string")
         memory = _optional_text(payload, "memory")
         if memory:
-            discovery_context = format_memory_augmented_prompt(discovery_context, memory)
+            discovery_context = format_memory_augmented_prompt(
+                discovery_context, memory
+            )
         paper_context = await search_papers_for_topic(topic, discovery_context)
         review = await review_selected_topic(topic, paper_context)
         return {"paper_context": paper_context, "review": review}
@@ -486,7 +527,8 @@ async def handle_api_request(path: str, payload: dict[str, Any]) -> dict[str, An
             _require_text(payload, "selected_topic"),
             _require_text(payload, "paper_context"),
             format_memory_augmented_prompt(
-                _require_text(payload, "review_context"), _optional_text(payload, "memory")
+                _require_text(payload, "review_context"),
+                _optional_text(payload, "memory"),
             ),
         )
         return {"output": output}
@@ -494,13 +536,15 @@ async def handle_api_request(path: str, payload: dict[str, Any]) -> dict[str, An
     raise KeyError(path)
 
 
-class YourResearchGuideRequestHandler(BaseHTTPRequestHandler):
-    """HTTP request handler for the YourResearchGuide app."""
+class ResearchAgentRequestHandler(BaseHTTPRequestHandler):
+    """HTTP request handler for the ResearchAgent app."""
 
-    server_version = "YourResearchGuideHTTP/0.1"
+    server_version = "ResearchAgentHTTP/0.1"
 
     def log_message(self, format: str, *args: Any) -> None:  # noqa: A002
-        logging.getLogger(__name__).info("%s - %s", self.address_string(), format % args)
+        logging.getLogger(__name__).info(
+            "%s - %s", self.address_string(), format % args
+        )
 
     def do_GET(self) -> None:  # noqa: N802
         path = urlparse(self.path).path
@@ -508,7 +552,9 @@ class YourResearchGuideRequestHandler(BaseHTTPRequestHandler):
             _html_response(self, build_home_page())
             return
         if path in {"/favicon.ico", "/favicon.svg"}:
-            _asset_response(self, FAVICON_SVG.encode("utf-8"), "image/svg+xml; charset=utf-8")
+            _asset_response(
+                self, FAVICON_SVG.encode("utf-8"), "image/svg+xml; charset=utf-8"
+            )
             return
         if path == "/api/health":
             settings = load_settings()
@@ -531,7 +577,11 @@ class YourResearchGuideRequestHandler(BaseHTTPRequestHandler):
         path = urlparse(self.path).path
         length = int(self.headers.get("Content-Length", "0"))
         if length > MAX_BODY_BYTES:
-            _json_response(self, HTTPStatus.REQUEST_ENTITY_TOO_LARGE, {"error": "Request body too large"})
+            _json_response(
+                self,
+                HTTPStatus.REQUEST_ENTITY_TOO_LARGE,
+                {"error": "Request body too large"},
+            )
             return
 
         try:
@@ -541,24 +591,32 @@ class YourResearchGuideRequestHandler(BaseHTTPRequestHandler):
                 raise ValueError("JSON body must be an object")
             result = asyncio.run(handle_api_request(path, payload))
         except KeyError:
-            _json_response(self, HTTPStatus.NOT_FOUND, {"error": f"Unknown path: {path}"})
+            _json_response(
+                self, HTTPStatus.NOT_FOUND, {"error": f"Unknown path: {path}"}
+            )
         except (json.JSONDecodeError, ValueError) as exc:
             _json_response(self, HTTPStatus.BAD_REQUEST, {"error": str(exc)})
-        except Exception as exc:  # pragma: no cover - preserves useful errors for the browser
+        except (
+            Exception
+        ) as exc:  # pragma: no cover - preserves useful errors for the browser
             logging.getLogger(__name__).exception("Agent workflow failed")
             _json_response(self, HTTPStatus.INTERNAL_SERVER_ERROR, {"error": str(exc)})
         else:
             _json_response(self, HTTPStatus.OK, result)
 
 
-def create_server(host: str = DEFAULT_HOST, port: int = DEFAULT_PORT) -> ThreadingHTTPServer:
-    """Create, but do not start, the YourResearchGuide HTTP server."""
+def create_server(
+    host: str = DEFAULT_HOST, port: int = DEFAULT_PORT
+) -> ThreadingHTTPServer:
+    """Create, but do not start, the ResearchAgent HTTP server."""
 
-    return ThreadingHTTPServer((host, port), YourResearchGuideRequestHandler)
+    return ThreadingHTTPServer((host, port), ResearchAgentRequestHandler)
 
 
-def run_server(host: str = DEFAULT_HOST, port: int = DEFAULT_PORT, *, open_browser: bool = False) -> None:
-    """Run the YourResearchGuide web server until interrupted."""
+def run_server(
+    host: str = DEFAULT_HOST, port: int = DEFAULT_PORT, *, open_browser: bool = False
+) -> None:
+    """Run the ResearchAgent web server until interrupted."""
 
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     server = create_server(host, port)
@@ -569,7 +627,7 @@ def run_server(host: str = DEFAULT_HOST, port: int = DEFAULT_PORT, *, open_brows
     try:
         server.serve_forever()
     except KeyboardInterrupt:
-        print("\nShutting down YourResearchGuide.")
+        print("\nShutting down ResearchAgent.")
     finally:
         server.server_close()
 
@@ -577,15 +635,26 @@ def run_server(host: str = DEFAULT_HOST, port: int = DEFAULT_PORT, *, open_brows
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     """Parse web-server command-line arguments."""
 
-    parser = argparse.ArgumentParser(description=f"Run {APP_NAME}, the research-agent web UI.")
-    parser.add_argument("--host", default=DEFAULT_HOST, help=f"Host to bind (default: {DEFAULT_HOST}).")
-    parser.add_argument("--port", type=int, default=DEFAULT_PORT, help=f"Port to bind (default: {DEFAULT_PORT}).")
-    parser.add_argument("--open", action="store_true", help="Open the web UI in your default browser.")
+    parser = argparse.ArgumentParser(
+        description=f"Run {APP_NAME}, the research-agent web UI."
+    )
+    parser.add_argument(
+        "--host", default=DEFAULT_HOST, help=f"Host to bind (default: {DEFAULT_HOST})."
+    )
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=DEFAULT_PORT,
+        help=f"Port to bind (default: {DEFAULT_PORT}).",
+    )
+    parser.add_argument(
+        "--open", action="store_true", help="Open the web UI in your default browser."
+    )
     return parser.parse_args(argv)
 
 
 def main(argv: list[str] | None = None) -> None:
-    """Console entry point for the YourResearchGuide web UI."""
+    """Console entry point for the ResearchAgent web UI."""
 
     args = parse_args(argv)
     run_server(args.host, args.port, open_browser=args.open)
