@@ -135,12 +135,16 @@ def test_home_page_includes_generated_code_interface_controls() -> None:
     assert 'id="codeEditor"' in html
     assert 'id="runDummy"' in html
     assert 'id="publishGithub"' in html
+    assert 'id="createPullRequest"' in html
+    assert 'id="viewPullRequest"' in html
     assert 'publishWorkspaceToGithub' in html
+    assert 'createWorkspacePullRequest' in html
     assert '/api/coding/files' in html
     assert '/api/coding/file' in html
     assert '/api/coding/save' in html
     assert '/api/coding/run' in html
     assert '/api/coding/publish' in html
+    assert '/api/coding/create-pr' in html
     assert 'state.currentWorkspace = data.workspace' in html
 
 
@@ -199,6 +203,7 @@ def test_coding_workspace_publish_api_creates_remote_and_pushes(tmp_path, monkey
     import asyncio
     import subprocess
     import research_agents.workflow as workflow
+    import research_agents.web as web
     from research_agents.web import handle_api_request
 
     monkeypatch.chdir(tmp_path)
@@ -225,8 +230,9 @@ def test_coding_workspace_publish_api_creates_remote_and_pushes(tmp_path, monkey
     monkeypatch.setattr(
         workflow, "create_github_repository", fake_create_github_repository
     )
+    monkeypatch.setattr(web.time, "time", lambda: 1234567890)
 
-    result = asyncio.run(
+    publish_result = asyncio.run(
         handle_api_request(
             "/api/coding/publish",
             {
@@ -238,12 +244,23 @@ def test_coding_workspace_publish_api_creates_remote_and_pushes(tmp_path, monkey
         )
     )
 
-    assert result["published"] is True
-    assert result["pushed"] is True
-    assert result["pull_request_created"] is False
-    assert result["html_url"] == str(bare_repo)
-    assert result["branch"] == "researchagent-coding-workspace"
-    assert "push -u origin researchagent-coding-workspace" in result["push_command"]
+    assert publish_result["published"] is True
+    assert publish_result["linked"] is True
+    assert publish_result["create_pr_enabled"] is True
+    assert publish_result["html_url"] == str(bare_repo)
+
+    pr_result = asyncio.run(
+        handle_api_request(
+            "/api/coding/create-pr",
+            {"workspace": workspace, "repo_url": publish_result["html_url"]},
+        )
+    )
+
+    assert pr_result["pushed"] is True
+    assert pr_result["pull_request_created"] is False
+    assert pr_result["html_url"] == str(bare_repo)
+    assert pr_result["branch"] == "researchagent-coding-workspace-1234567890"
+    assert "push -u origin researchagent-coding-workspace-1234567890" in pr_result["push_command"]
     refs = subprocess.run(
         ["git", "for-each-ref", "--format=%(refname:short)", "refs/heads"],
         cwd=bare_repo,
@@ -251,4 +268,4 @@ def test_coding_workspace_publish_api_creates_remote_and_pushes(tmp_path, monkey
         capture_output=True,
         text=True,
     ).stdout.splitlines()
-    assert refs == ["main", "researchagent-coding-workspace"]
+    assert refs == ["main", "researchagent-coding-workspace-1234567890"]

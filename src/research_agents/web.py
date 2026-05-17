@@ -11,6 +11,7 @@ import os
 import shutil
 import subprocess
 import tempfile
+import time
 import urllib.error
 import urllib.request
 import threading
@@ -374,6 +375,8 @@ def build_home_page() -> str:
       </div>
       <div class="code-interface-actions">
         <button class="secondary" id="publishGithub" type="button">Publish GitHub</button>
+        <button class="secondary" id="createPullRequest" type="button" disabled>Create PR</button>
+        <button class="secondary" id="viewPullRequest" type="button" disabled>View PR</button>
         <button class="secondary" id="refreshTree" type="button">Refresh tree</button>
         <button class="secondary" id="saveCode" type="button">Save code</button>
         <button class="primary" id="runDummy" type="button">Run dummy</button>
@@ -389,7 +392,7 @@ def build_home_page() -> str:
         <div class="editor-meta"><h3>Code console</h3><span id="selectedFile">Select a file to edit.</span></div>
         <textarea class="code-editor" id="codeEditor" spellcheck="false" placeholder="Select a generated file from the tree. Changes are saved back to the local workspace."></textarea>
         <div class="editor-meta"><span>Dummy-data verification runs the generated scaffold against data/dummy_dataset.csv.</span><span id="saveState">Idle</span></div>
-        <pre class="run-console" id="runConsole">Run output will appear here. Use Publish GitHub to create a GitHub repository with the repo-local plugin and push this workspace.</pre>
+        <pre class="run-console" id="runConsole">Run output will appear here. Use Publish GitHub to create and link a repo, then Create PR to bundle and push new changes for review.</pre>
       </section>
     </div>
   </section>
@@ -398,7 +401,7 @@ def build_home_page() -> str:
     const STORAGE_KEY = 'researchagent.conversations.v1';
     const LEGACY_STORAGE_KEY = 'yourresearchguide.conversations.v1';
     const ANCIENT_STORAGE_KEY = 'agentarium.conversations.v1';
-    const state = {{ mode: 'research', lastDiscovery: '', lastPaperContext: '', lastReview: '', lastCoding: '', conversations: [], currentId: '', activeModelProvider: '', currentWorkspace: '', selectedFile: '' }};
+    const state = {{ mode: 'research', lastDiscovery: '', lastPaperContext: '', lastReview: '', lastCoding: '', conversations: [], currentId: '', activeModelProvider: '', currentWorkspace: '', selectedFile: '', githubRepoUrl: '', pullRequestUrl: '' }};
     const $ = (id) => document.getElementById(id);
     const output = $('output');
 
@@ -498,7 +501,9 @@ def build_home_page() -> str:
     }}
     function updateCodeInterfaceButton() {{
       $('openCodeInterface').classList.toggle('visible', Boolean(state.currentWorkspace));
-      $('workspacePath').textContent = state.currentWorkspace || 'No workspace loaded yet.';
+      $('workspacePath').textContent = state.githubRepoUrl ? state.currentWorkspace + ' · ' + state.githubRepoUrl : (state.currentWorkspace || 'No workspace loaded yet.');
+      $('createPullRequest').disabled = !state.currentWorkspace || !state.githubRepoUrl;
+      $('viewPullRequest').disabled = !state.pullRequestUrl;
     }}
     function renderFileTree(nodes, depth = 0) {{
       const fragment = document.createDocumentFragment();
@@ -557,15 +562,32 @@ def build_home_page() -> str:
       $('runConsole').textContent = 'Publishing workspace to GitHub…';
       const data = await postJSON('/api/coding/publish', {{ workspace: state.currentWorkspace, repo: repoName, owner, private: privateRepo }});
       const lines = [data.message || 'GitHub publish request finished.'];
-      if (data.html_url) lines.push('Repository: ' + data.html_url);
-      if (data.pull_request_url) lines.push('Pull request: ' + data.pull_request_url);
-      if (data.compare_url) lines.push('Create PR page: ' + data.compare_url);
+      if (data.html_url) {{ state.githubRepoUrl = data.html_url; lines.push('Repository: ' + data.html_url); }}
       if (data.create_url) lines.push('Create repo page: ' + data.create_url);
+      if (data.error) lines.push('Error: ' + data.error);
+      $('runConsole').textContent = lines.join('\\n');
+      updateCodeInterfaceButton();
+      const publishUrl = data.html_url || data.create_url;
+      if (publishUrl) window.open(publishUrl, '_blank', 'noopener');
+    }}
+    async function createWorkspacePullRequest() {{
+      if (!state.currentWorkspace) {{ $('runConsole').textContent = 'No generated workspace yet.'; return; }}
+      if (!state.githubRepoUrl) {{ $('runConsole').textContent = 'Publish GitHub first so this workspace is linked to a repository.'; return; }}
+      $('runConsole').textContent = 'Bundling workspace changes and creating a pull request…';
+      const data = await postJSON('/api/coding/create-pr', {{ workspace: state.currentWorkspace, repo_url: state.githubRepoUrl }});
+      const lines = [data.message || 'Create PR request finished.'];
+      if (data.html_url) lines.push('Repository: ' + data.html_url);
+      if (data.pull_request_url) {{ state.pullRequestUrl = data.pull_request_url; lines.push('Pull request: ' + data.pull_request_url); }}
+      if (data.compare_url) {{ if (!state.pullRequestUrl) state.pullRequestUrl = data.compare_url; lines.push('Create PR page: ' + data.compare_url); }}
       if (data.push_command) lines.push('Manual push command: ' + data.push_command);
       if (data.error) lines.push('Error: ' + data.error);
       $('runConsole').textContent = lines.join('\\n');
-      const publishUrl = data.pull_request_url || data.compare_url || data.html_url || data.create_url;
-      if (publishUrl) window.open(publishUrl, '_blank', 'noopener');
+      updateCodeInterfaceButton();
+      const prUrl = data.pull_request_url || data.compare_url || data.html_url;
+      if (prUrl) window.open(prUrl, '_blank', 'noopener');
+    }}
+    function viewPullRequest() {{
+      if (state.pullRequestUrl) window.open(state.pullRequestUrl, '_blank', 'noopener');
     }}
     function activateMode(mode) {{
       const targetMode = mode || 'research';
@@ -590,6 +612,8 @@ def build_home_page() -> str:
     $('saveCode').addEventListener('click', () => saveWorkspaceFile().catch(err => {{ $('saveState').textContent = 'Error: ' + err.message; }}));
     $('runDummy').addEventListener('click', () => runDummyWorkspace().catch(err => {{ $('runConsole').textContent = 'Error: ' + err.message; }}));
     $('publishGithub').addEventListener('click', () => publishWorkspaceToGithub().catch(err => {{ $('runConsole').textContent = 'Error: ' + err.message; }}));
+    $('createPullRequest').addEventListener('click', () => createWorkspacePullRequest().catch(err => {{ $('runConsole').textContent = 'Error: ' + err.message; }}));
+    $('viewPullRequest').addEventListener('click', viewPullRequest);
     $('run').addEventListener('click', async () => {{
       const prompt = $('prompt').value.trim();
       if (state.mode === 'research' && looksLikeCodingRequest(prompt)) activateMode('coding');
@@ -971,55 +995,109 @@ def _create_github_pull_request(
     return result.stdout.strip().splitlines()[-1] if result.stdout.strip() else ""
 
 
-def _push_workspace_pull_request_branch(root: Path, html_url: str) -> dict[str, str]:
-    """Push workspace files to a PR branch, using main as a minimal base."""
+def _remote_has_branch(remote_url: str, branch: str) -> bool:
+    """Return whether a remote branch exists."""
 
-    branch = "researchagent-coding-workspace"
+    result = subprocess.run(
+        ["git", "ls-remote", "--heads", remote_url, branch],
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    return result.returncode == 0 and bool(result.stdout.strip())
+
+
+def _has_staged_changes(cwd: Path) -> bool:
+    """Return whether the temporary checkout has staged changes."""
+
+    result = subprocess.run(
+        ["git", "diff", "--cached", "--quiet"],
+        cwd=cwd,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    return result.returncode == 1
+
+
+def _clear_publish_checkout(publish_root: Path) -> None:
+    """Clear checkout files while preserving git metadata."""
+
+    for item in publish_root.iterdir():
+        if item.name == ".git":
+            continue
+        if item.is_dir():
+            shutil.rmtree(item)
+        else:
+            item.unlink()
+
+
+def _push_workspace_pull_request_branch(root: Path, html_url: str) -> dict[str, str]:
+    """Push workspace files to a fresh PR branch, using main as the base."""
+
+    branch = f"researchagent-coding-workspace-{int(time.time())}"
     with tempfile.TemporaryDirectory(prefix="researchagent-publish-") as tmpdir:
         publish_root = Path(tmpdir)
-        _run_git(["init", "--initial-branch", "main"], publish_root)
+        if _remote_has_branch(html_url, "main"):
+            _run_git(["clone", "--branch", "main", html_url, str(publish_root)], Path.cwd())
+        else:
+            _run_git(["init", "--initial-branch", "main"], publish_root)
+            _run_git(["config", "user.name", "ResearchAgent"], publish_root)
+            _run_git(["config", "user.email", "researchagent@example.com"], publish_root)
+            (publish_root / "README.md").write_text(
+                "# ResearchAgent coding workspace\n\n"
+                "Open a pull request branch to review generated code.\n",
+                encoding="utf-8",
+            )
+            _run_git(["add", "README.md"], publish_root)
+            _run_git(
+                ["commit", "-m", "Initialize repository for coding workspace PR"],
+                publish_root,
+            )
+            _run_git(["remote", "add", "origin", html_url], publish_root)
+            _run_git(["push", "-u", "origin", "main"], publish_root)
+
         _run_git(["config", "user.name", "ResearchAgent"], publish_root)
         _run_git(["config", "user.email", "researchagent@example.com"], publish_root)
-        (publish_root / "README.md").write_text(
-            "# ResearchAgent coding workspace\n\n"
-            "Open the pull request branch to review generated code.\n",
-            encoding="utf-8",
-        )
-        _run_git(["add", "README.md"], publish_root)
-        _run_git(
-            ["commit", "-m", "Initialize repository for coding workspace PR"],
-            publish_root,
-        )
-        _run_git(["remote", "add", "origin", html_url], publish_root)
-        _run_git(["push", "-u", "origin", "main"], publish_root)
         _run_git(["checkout", "-b", branch], publish_root)
+        _clear_publish_checkout(publish_root)
         _copy_workspace_contents_for_publish(root, publish_root)
         _run_git(["add", "-A"], publish_root)
-        _run_git(["commit", "-m", "Add ResearchAgent coding workspace"], publish_root)
+        if not _has_staged_changes(publish_root):
+            return {
+                "branch": branch,
+                "compare_url": _github_compare_url(html_url, branch),
+                "pull_request_url": "",
+                "push_command": f"git push -u origin {branch}",
+                "no_changes": "true",
+            }
+        _run_git(["commit", "-m", "Bundle ResearchAgent coding workspace changes"], publish_root)
         _run_git(["push", "-u", "origin", branch], publish_root)
 
     compare_url = _github_compare_url(html_url, branch)
     pull_request_url = _create_github_pull_request(
         html_url,
         branch,
-        "Add ResearchAgent coding workspace",
-        "This PR publishes the files generated and edited in the ResearchAgent "
-        "coding workspace.",
+        "Bundle ResearchAgent coding workspace changes",
+        "This PR bundles the latest files generated and edited in the "
+        "ResearchAgent coding workspace.",
     )
     return {
         "branch": branch,
         "compare_url": compare_url,
         "pull_request_url": pull_request_url,
         "push_command": f"git push -u origin {branch}",
+        "no_changes": "false",
     }
 
 
 def _publish_workspace_to_github(
     workspace: str, repo_name: str, owner: str = "", private: bool = False
 ) -> dict[str, Any]:
-    """Create a GitHub repository, push a branch, and open/create a PR."""
+    """Create a GitHub repository and link it as the workspace remote."""
 
-    from .workflow import create_github_repository
+    from .workflow import _add_github_remote, create_github_repository
 
     root = _resolve_workspace(workspace)
     safe_repo_name = repo_name.strip() or root.name
@@ -1032,20 +1110,41 @@ def _publish_workspace_to_github(
             private=private,
             owner=owner.strip(),
         )
+        remote_name = _add_github_remote(root, html_url)
     except Exception as exc:
         return {
             "published": False,
-            "pushed": False,
-            "pull_request_created": False,
+            "linked": False,
+            "create_pr_enabled": False,
             "create_url": create_url,
             "error": str(exc),
             "message": (
-                "Could not create the repository automatically. A GitHub repo "
-                "creation page was opened; create the repo there, then push a "
-                "branch and open a pull request."
+                "Could not create and link the repository automatically. A GitHub "
+                "repo creation page was opened; create the repo there, then link "
+                "it as a git remote before creating a pull request."
             ),
         }
 
+    return {
+        "published": True,
+        "linked": True,
+        "create_pr_enabled": True,
+        "html_url": html_url,
+        "remote_name": remote_name,
+        "message": (
+            "GitHub repository created and linked. Use Create PR to bundle "
+            "current workspace changes into a reviewable pull request."
+        ),
+    }
+
+
+def _create_workspace_pull_request(workspace: str, repo_url: str) -> dict[str, Any]:
+    """Bundle current workspace files into a PR branch for a linked repo."""
+
+    root = _resolve_workspace(workspace)
+    html_url = repo_url.strip()
+    if not html_url:
+        raise ValueError("'repo_url' is required")
     try:
         pr_result = _push_workspace_pull_request_branch(root, html_url)
     except Exception as exc:
@@ -1055,21 +1154,20 @@ def _publish_workspace_to_github(
             "pushed": False,
             "pull_request_created": False,
             "html_url": html_url,
-            "create_url": create_url,
             "compare_url": compare_url,
             "error": str(exc),
             "message": (
-                "GitHub repository was created, but pushing the pull request "
-                "branch failed. Check GitHub auth and push the workspace branch "
-                "manually."
+                "Creating the pull request branch failed. Check GitHub auth, "
+                "then retry Create PR to bundle the latest workspace changes."
             ),
         }
 
+    no_changes = pr_result.get("no_changes") == "true"
     pull_request_url = pr_result.get("pull_request_url", "")
     compare_url = pr_result.get("compare_url", "")
     return {
         "published": True,
-        "pushed": True,
+        "pushed": not no_changes,
         "pull_request_created": bool(pull_request_url),
         "html_url": html_url,
         "branch": pr_result["branch"],
@@ -1077,9 +1175,13 @@ def _publish_workspace_to_github(
         "pull_request_url": pull_request_url,
         "push_command": pr_result["push_command"],
         "message": (
-            "Published the coding workspace to a GitHub pull request."
-            if pull_request_url
-            else "Pushed the coding workspace branch; open the create-PR page to finish the pull request."
+            "No new workspace changes were found to bundle into a pull request."
+            if no_changes
+            else (
+                "Created a GitHub pull request for the latest workspace changes."
+                if pull_request_url
+                else "Pushed a workspace branch; open the create-PR page to finish and merge the pull request."
+            )
         ),
     }
 
@@ -1185,6 +1287,11 @@ async def _handle_api_request(path: str, payload: dict[str, Any]) -> dict[str, A
             _require_text(payload, "repo"),
             _optional_text(payload, "owner"),
             private,
+        )
+
+    if path == "/api/coding/create-pr":
+        return _create_workspace_pull_request(
+            _require_text(payload, "workspace"), _require_text(payload, "repo_url")
         )
 
     raise KeyError(path)
