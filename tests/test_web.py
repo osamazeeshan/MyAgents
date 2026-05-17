@@ -57,6 +57,7 @@ def test_home_page_script_escapes_newline_sequences_for_browser_parsing() -> Non
     assert r".join('\n\n')" in html
     assert r"+ '\n\nAgent is thinking…'" in html
     assert r"codingGoal ? '\n' + codingGoal" in html
+    assert "looksLikeCodingRequest(prompt)" in html
 
 
 def test_home_page_inline_script_is_valid_javascript(tmp_path: Path) -> None:
@@ -116,6 +117,9 @@ def test_home_page_includes_paper_coding_workspace() -> None:
     assert 'id="paperIdentifier"' in html
     assert 'id="codingGoal"' in html
     assert 'id="ideaStream"' in html
+    assert 'id="codingConsole"' in html
+    assert "qwen2.5-coder:7b" in html
+    assert "preferCodingModel()" in html
     assert "/api/coding/implement" in html
     assert "state.mode === 'coding'" in html
     assert "codingWindow').classList.toggle('visible'" in html

@@ -62,7 +62,7 @@ AGENT_SUGGESTIONS = [
     },
     {
         "name": "Paper Coding Agent",
-        "role": "Plans an implementation from a paper ID or title and proposes LLM-generated experiment ideas.",
+        "role": "Creates a local coding workspace, then implements paper steps with LLM-guided experiments.",
         "try": "Implement arXiv:1706.03762 and suggest two extension experiments.",
         "mode": "coding",
     },
@@ -241,6 +241,9 @@ def build_home_page() -> str:
     .coding-window h3 {{ margin: 3px 0 0; color: var(--text); text-transform: none; letter-spacing: -.02em; font-size: 16px; }}
     .coding-window .eyebrow, #codingState {{ color: var(--accent); font-size: 11px; font-weight: 800; letter-spacing: .09em; text-transform: uppercase; }}
     #codingState {{ color: var(--muted); text-align: right; }}
+    .coding-console {{ min-height: 92px; max-height: 210px; overflow: auto; border: 1px solid rgba(124,247,212,.24); border-radius: 16px; padding: 12px; background: rgba(0,0,0,.28); color: #dffdf5; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 12px; line-height: 1.45; white-space: pre-wrap; }}
+    .coding-console .muted {{ color: var(--muted); }}
+    .coding-model-note {{ color: var(--muted); font-size: 12px; line-height: 1.35; }}
     details {{ margin-top: 16px; color: var(--muted); flex: 0 0 auto; }}
     pre {{ overflow: auto; background: rgba(0,0,0,.3); padding: 12px; border-radius: 12px; }}
     @media (max-width: 1180px) {{
@@ -307,6 +310,8 @@ def build_home_page() -> str:
             <input id="paperIdentifier" placeholder="Paper ID or title (for example arXiv:1706.03762 or Attention Is All You Need)" />
             <textarea id="codingGoal" placeholder="Implementation goal, target framework, repo constraints, or dataset details."></textarea>
             <textarea id="ideaStream" placeholder="Optional: LLM idea prompts, variants to try, ablations, metrics, or links to explore."></textarea>
+            <div class="coding-model-note">Recommended free local model for Mac M2 16GB: <b>coding · qwen2.5-coder:7b</b>. Coding mode auto-selects it when available.</div>
+            <div class="coding-console" id="codingConsole" aria-live="polite"><span class="muted">Coding console appears here when a coding request starts.</span></div>
           </div>
           <div class="conference-fields" id="conferenceFields">
             <input id="topic" placeholder="Selected topic (required for review/follow-up)" />
@@ -334,7 +339,7 @@ def build_home_page() -> str:
     const STORAGE_KEY = 'researchagent.conversations.v1';
     const LEGACY_STORAGE_KEY = 'yourresearchguide.conversations.v1';
     const ANCIENT_STORAGE_KEY = 'agentarium.conversations.v1';
-    const state = {{ mode: 'research', lastDiscovery: '', lastPaperContext: '', lastReview: '', lastCoding: '', conversations: [], currentId: '' }};
+    const state = {{ mode: 'research', lastDiscovery: '', lastPaperContext: '', lastReview: '', lastCoding: '', conversations: [], currentId: '', activeModelProvider: '' }};
     const $ = (id) => document.getElementById(id);
     const output = $('output');
 
@@ -419,6 +424,20 @@ def build_home_page() -> str:
       if (!res.ok) throw new Error(data.error || res.statusText);
       return data;
     }}
+    function looksLikeCodingRequest(text) {{
+      return /\b(code|coding|implement|implementation|repo|repository|environment|env|scaffold|folder|folders|python|pytorch|pytest|train|dataset|experiment|ablation)\b/i.test(text || '');
+    }}
+    function setCodingConsole(lines) {{
+      const consoleBox = $('codingConsole');
+      consoleBox.textContent = Array.isArray(lines) ? lines.join('\\n') : (lines || '');
+      consoleBox.scrollTop = consoleBox.scrollHeight;
+    }}
+    function appendCodingConsole(line) {{ setCodingConsole(($('codingConsole').textContent + '\\n' + line).trim()); }}
+    function preferCodingModel() {{
+      const choice = $('modelChoice');
+      const codingOption = Array.from(choice.options).find(option => option.value === 'coding');
+      if (codingOption) {{ choice.value = 'coding'; $('model').textContent = codingOption.textContent.split(' · ').pop(); }}
+    }}
     function activateMode(mode) {{
       const targetMode = mode || 'research';
       document.querySelectorAll('.mode').forEach(b => b.classList.toggle('active', b.dataset.mode === targetMode));
@@ -427,16 +446,18 @@ def build_home_page() -> str:
       $('codingWindow').classList.toggle('visible', state.mode === 'coding');
       $('codingWindow').setAttribute('aria-hidden', state.mode === 'coding' ? 'false' : 'true');
       $('codingState').textContent = state.mode === 'coding' ? 'Ready for coding' : 'Hidden until coding mode';
+      if (state.mode === 'coding') {{ preferCodingModel(); setCodingConsole('Ready. Ask for a paper implementation and I will create a local workspace under reproduction_repos/.'); }}
       $('prompt').placeholder = state.mode === 'discover' ? 'Describe the domain to scan across recent top conferences…' : state.mode === 'coding' ? 'Ask for implementation steps, code structure, ablations, or new LLM-generated ideas…' : 'Ask a research question, describe a topic, or paste a follow-up…';
     }}
     document.querySelectorAll('.mode').forEach(btn => btn.addEventListener('click', () => activateMode(btn.dataset.mode)));
-    document.querySelectorAll('.suggestion').forEach(btn => btn.addEventListener('click', () => {{ activateMode(btn.dataset.mode); $('prompt').value = btn.dataset.prompt; $('prompt').focus(); }}));
+    document.querySelectorAll('.suggestion').forEach(btn => btn.addEventListener('click', () => {{ activateMode(btn.dataset.mode); $('prompt').value = btn.dataset.prompt; if (btn.dataset.mode === 'coding') $('paperIdentifier').value = btn.dataset.prompt; $('prompt').focus(); }}));
     $('newChat').addEventListener('click', () => {{ const chat = newConversation(); state.conversations.unshift(chat); state.currentId = chat.id; saveConversations(); hydrateCurrent(); }});
     $('deleteChat').addEventListener('click', () => {{ state.conversations = state.conversations.filter(c => c.id !== state.currentId); if (!state.conversations.length) state.conversations = [newConversation()]; state.currentId = state.conversations[0].id; saveConversations(); hydrateCurrent(); }});
     $('restore').addEventListener('click', hydrateCurrent);
-    $('clear').addEventListener('click', () => {{ $('prompt').value = ''; $('topic').value = ''; $('paperIdentifier').value = ''; $('codingGoal').value = ''; $('ideaStream').value = ''; }});
+    $('clear').addEventListener('click', () => {{ $('prompt').value = ''; $('topic').value = ''; $('paperIdentifier').value = ''; $('codingGoal').value = ''; $('ideaStream').value = ''; setCodingConsole('Coding console appears here when a coding request starts.'); }});
     $('run').addEventListener('click', async () => {{
       const prompt = $('prompt').value.trim();
+      if (state.mode === 'research' && looksLikeCodingRequest(prompt)) activateMode('coding');
       if (!prompt && state.mode !== 'discover' && state.mode !== 'coding') {{ setOutput('Please enter a prompt before running agents.'); return; }}
       const topic = $('topic').value.trim();
       const context = $('context').value.trim() || state.lastReview || state.lastPaperContext || state.lastDiscovery;
@@ -458,8 +479,9 @@ def build_home_page() -> str:
           state.lastPaperContext = data.paper_context; state.lastReview = data.review; const chat = currentConversation(); chat.lastPaperContext = data.paper_context; chat.lastReview = data.review; $('context').value = data.paper_context + '\\n\\n' + data.review; remember('agent', data.paper_context + '\\n\\n' + data.review); setOutput(renderTranscript(currentConversation()));
         }} else if (state.mode === 'coding') {{
           $('codingState').textContent = 'Coding agent running…';
+          setCodingConsole(['1. Detect coding request and select the Mac-friendly coding model.', '2. Create a local workspace under reproduction_repos/.', '3. Write environment bootstrap files, source folders, tests, and experiment notes.', '4. Ask the coding model for step-by-step implementation work.']);
           const data = await postJSON('/api/coding/implement', {{ paper: paperIdentifier, goal: codingGoal || prompt, ideas: ideaStream, memory: memoryContext(), model: selectedModel() }});
-          state.lastCoding = data.output; const chat = currentConversation(); chat.lastCoding = data.output; remember('agent', data.output); setOutput(renderTranscript(currentConversation()));
+          state.lastCoding = data.output; setCodingConsole(data.console || data.output); const chat = currentConversation(); chat.lastCoding = data.output; remember('agent', data.output); setOutput(renderTranscript(currentConversation()));
         }} else {{
           const data = await postJSON('/api/conference/follow-up', {{ question: prompt, selected_topic: topic, paper_context: state.lastPaperContext || context, review_context: state.lastReview || context, memory: memoryContext(), model: selectedModel() }});
           remember('agent', data.output); appendOutput('Follow-up: ' + prompt, data.output);
@@ -469,7 +491,7 @@ def build_home_page() -> str:
     }});
     $('modelChoice').addEventListener('change', () => {{ $('model').textContent = $('modelChoice').selectedOptions[0].textContent.split(' · ').pop(); }});
     loadConversations();
-    fetch('/api/health').then(r => r.json()).then(data => {{ $('model').textContent = data.model; }});
+    fetch('/api/health').then(r => r.json()).then(data => {{ $('model').textContent = data.model; state.activeModelProvider = data.provider; }});
   </script>
 </body>
 </html>"""

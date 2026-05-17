@@ -440,6 +440,7 @@ def test_format_paper_coding_prompt_includes_identifier_goal_and_ideas() -> None
     assert "Implement in PyTorch" in prompt
     assert "LLM-generated optimizer variant" in prompt
     assert "LLM idea loop" in prompt
+    assert "qwen2.5-coder:7b" in prompt
 
 
 def test_web_coding_api_delegates_to_workflow(monkeypatch) -> None:
@@ -469,3 +470,40 @@ def test_web_coding_api_delegates_to_workflow(monkeypatch) -> None:
     )
 
     assert result == {"output": "coding plan"}
+
+
+def test_prepare_paper_coding_environment_creates_stepwise_workspace(tmp_path, monkeypatch) -> None:
+    import research_agents.workflow as workflow
+
+    monkeypatch.setattr(workflow, "REPRODUCTION_REPOS_DIR", tmp_path)
+
+    console = workflow.prepare_paper_coding_environment(
+        "arXiv:1706.03762",
+        "Implement in PyTorch with smoke tests.",
+        "Try adapter ablations.",
+    )
+
+    repo_path = tmp_path / "arXiv-1706.03762-coding-lab"
+    assert "# Coding Console" in console
+    assert "qwen2.5-coder:7b" in console
+    assert "scripts/bootstrap_env.sh" in console
+    assert (repo_path / "CODING_AGENT.md").exists()
+    assert (repo_path / "scripts" / "bootstrap_env.sh").exists()
+    assert (repo_path / "experiments" / "README.md").exists()
+    assert (repo_path / "notebooks" / ".gitkeep").exists()
+    assert (repo_path / "artifacts" / ".gitkeep").exists()
+    assert (repo_path / ".env.example").read_text(encoding="utf-8").splitlines()[1] == "RESEARCH_AGENTS_MODEL=coding"
+
+
+def test_prepare_paper_coding_environment_uses_unique_paths(tmp_path, monkeypatch) -> None:
+    import research_agents.workflow as workflow
+
+    monkeypatch.setattr(workflow, "REPRODUCTION_REPOS_DIR", tmp_path)
+
+    first = workflow.prepare_paper_coding_environment("Paper A")
+    second = workflow.prepare_paper_coding_environment("Paper A")
+
+    assert "Paper-A-coding-lab" in first
+    assert "Paper-A-coding-lab-2" in second
+    assert (tmp_path / "Paper-A-coding-lab").exists()
+    assert (tmp_path / "Paper-A-coding-lab-2").exists()
