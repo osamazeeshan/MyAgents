@@ -183,6 +183,45 @@ def test_prepare_reproduction_repository_creates_scaffold(tmp_path, monkeypatch)
 
 
 
+
+def test_create_github_repository_delegates_to_plugin(monkeypatch) -> None:
+    import research_agents.workflow as workflow
+
+    calls: list[tuple[str, str, bool, str]] = []
+
+    def fake_plugin(repo_name: str, description: str, private: bool, owner: str) -> str:
+        calls.append((repo_name, description, private, owner))
+        return "https://github.com/example/plugin-created"
+
+    monkeypatch.setattr(workflow, "_create_github_repository_with_plugin", fake_plugin)
+
+    result = workflow.create_github_repository(
+        "Plugin Created Repo!",
+        description="desc",
+        private=True,
+        owner="example",
+    )
+
+    assert result == "https://github.com/example/plugin-created"
+    assert calls == [("Plugin-Created-Repo", "desc", True, "example")]
+
+
+def test_github_repo_creator_plugin_manifest_and_marketplace() -> None:
+    import json
+    from pathlib import Path
+
+    manifest = json.loads(
+        Path("plugins/github-repo-creator/.codex-plugin/plugin.json").read_text(encoding="utf-8")
+    )
+    marketplace = json.loads(Path(".agents/plugins/marketplace.json").read_text(encoding="utf-8"))
+
+    assert manifest["name"] == "github-repo-creator"
+    assert manifest["skills"] == "./skills/"
+    assert "login" in manifest["interface"]["longDescription"].lower()
+    assert marketplace["plugins"][0]["name"] == "github-repo-creator"
+    assert marketplace["plugins"][0]["policy"]["authentication"] == "ON_USE"
+
+
 def test_prepare_reproduction_repository_scaffold_includes_dummy_code_and_tests(tmp_path, monkeypatch) -> None:
     import research_agents.workflow as workflow
 

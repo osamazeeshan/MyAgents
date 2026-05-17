@@ -7,6 +7,8 @@ import json
 import os
 import re
 import subprocess
+import sys
+import tempfile
 import urllib.error
 import urllib.request
 from collections.abc import Callable
@@ -725,31 +727,71 @@ def _safe_repo_name(name: str) -> str:
     return safe or "paper-reproduction"
 
 
-def create_github_repository(
-    repo_name: str,
-    *,
-    description: str = "",
-    private: bool = False,
-    owner: str = "",
-    token: str | None = None,
+def _github_repo_creator_plugin_script() -> Path:
+    """Return the repo-local GitHub plugin script path."""
+
+    return (
+        Path(__file__).resolve().parents[2]
+        / "plugins"
+        / "github-repo-creator"
+        / "scripts"
+        / "create_github_repo.py"
+    )
+
+
+def _create_github_repository_with_plugin(
+    repo_name: str, description: str, private: bool, owner: str
 ) -> str:
-    """Create a GitHub repository and return its browser URL.
+    """Create a GitHub repository through the repo-local plugin helper."""
 
-    Authentication is intentionally externalized to ``GITHUB_TOKEN`` or
-    ``GH_TOKEN`` so the workflow never prompts for credentials or stores them in
-    generated repositories. Supplying ``owner`` creates an organization repo;
-    leaving it blank creates a repository for the authenticated user.
-    """
+    script = _github_repo_creator_plugin_script()
+    if not script.exists():
+        raise FileNotFoundError(f"GitHub repo creator plugin script not found: {script}")
 
-    github_token = token or os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN")
-    if not github_token:
+    with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as output_file:
+        output_path = Path(output_file.name)
+
+    cmd = [
+        sys.executable,
+        str(script),
+        repo_name,
+        "--description",
+        description or "Research paper reproduction workspace",
+        "--visibility",
+        "private" if private else "public",
+        "--output",
+        str(output_path),
+    ]
+    if owner:
+        cmd.extend(["--owner", owner])
+
+    try:
+        if sys.stdin.isatty():
+            subprocess.run(cmd, check=True)
+        else:
+            subprocess.run(cmd, check=True, capture_output=True, text=True)
+        data = json.loads(output_path.read_text(encoding="utf-8"))
+    except subprocess.CalledProcessError as exc:
+        stderr = exc.stderr.strip() if exc.stderr else ""
         raise RuntimeError(
-            "GitHub repository creation requires GITHUB_TOKEN or GH_TOKEN with repo permissions."
-        )
+            "GitHub repository creation plugin failed" + (f": {stderr}" if stderr else ".")
+        ) from exc
+    finally:
+        output_path.unlink(missing_ok=True)
 
-    safe_name = _safe_repo_name(repo_name)
+    html_url = data.get("html_url")
+    if not isinstance(html_url, str) or not html_url:
+        raise RuntimeError("GitHub repository creation plugin did not return html_url.")
+    return html_url
+
+
+def _create_github_repository_with_token(
+    repo_name: str, description: str, private: bool, owner: str, token: str
+) -> str:
+    """Create a GitHub repository directly with a token fallback."""
+
     payload = {
-        "name": safe_name,
+        "name": repo_name,
         "description": description or "Research paper reproduction workspace",
         "private": private,
         "auto_init": False,
@@ -764,7 +806,7 @@ def create_github_repository(
         data=json.dumps(payload).encode("utf-8"),
         headers={
             "Accept": "application/vnd.github+json",
-            "Authorization": f"Bearer {github_token}",
+            "Authorization": f"Bearer {token}",
             "Content-Type": "application/json",
             "User-Agent": "YourResearchGuide/0.1",
             "X-GitHub-Api-Version": "2022-11-28",
@@ -784,6 +826,41 @@ def create_github_repository(
     if not isinstance(html_url, str) or not html_url:
         raise RuntimeError("GitHub repository creation succeeded but no html_url was returned.")
     return html_url
+
+
+def create_github_repository(
+    repo_name: str,
+    *,
+    description: str = "",
+    private: bool = False,
+    owner: str = "",
+    token: str | None = None,
+) -> str:
+    """Create a GitHub repository and return its browser URL.
+
+    Repository creation is delegated to the repo-local GitHub plugin so an
+    interactive terminal can ask the user to log in with ``gh auth login`` when
+    necessary. Supplying ``owner`` creates an organization repo; leaving it blank
+    creates a repository for the authenticated user.
+    """
+
+    safe_name = _safe_repo_name(repo_name)
+    if token:
+        return _create_github_repository_with_token(
+            safe_name, description, private, owner, token
+        )
+
+    try:
+        return _create_github_repository_with_plugin(
+            safe_name, description, private, owner
+        )
+    except FileNotFoundError:
+        github_token = os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN")
+        if github_token:
+            return _create_github_repository_with_token(
+                safe_name, description, private, owner, github_token
+            )
+        raise
 
 
 def _write_dummy_dataset_scaffold(repo_path: Path, repo_title: str) -> None:

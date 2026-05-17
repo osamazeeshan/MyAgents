@@ -75,11 +75,37 @@ existing code URL to clone, optional dataset notes, a local repo name, and an
 optional GitHub repository to create before a final confirmation. If a code URL
 is supplied it runs `git clone`; otherwise it creates a clean-room scaffold under
 `reproduction_repos/` with baseline Python code, a dummy CSV dataset, and pytest
-smoke tests. GitHub creation uses the GitHub REST API with `GITHUB_TOKEN` or
-`GH_TOKEN`, adds the new repository as a git remote, and prints the push command
-so you can publish the scaffold or cloned work when ready. The reproduction
-planner then proposes the next confirmed implementation steps, including how to
-replace the dummy dataset with a user-provided dataset when available.
+smoke tests. GitHub creation is provided by the repo-local
+`github-repo-creator` plugin. The plugin uses `GITHUB_TOKEN` or `GH_TOKEN` when
+available; otherwise it uses the
+GitHub CLI and prompts for `gh auth login` in an interactive terminal when login
+is necessary. After creating the repo, the workflow adds it as a git remote and
+prints the push command so you can publish the scaffold or cloned work when
+ready. The reproduction planner then proposes the next confirmed implementation
+steps, including how to replace the dummy dataset with a user-provided dataset
+when available.
+
+### GitHub Repo Creator plugin
+
+This repository includes a local Codex plugin at `plugins/github-repo-creator/`
+for creating GitHub repositories from the reproduction workflow or from the
+command line. It is registered in `.agents/plugins/marketplace.json` with
+authentication on use, because repository creation may require a GitHub login.
+
+```bash
+python plugins/github-repo-creator/scripts/create_github_repo.py my-paper-repro \
+  --description "Paper reproduction workspace" \
+  --visibility private
+```
+
+Authentication behavior:
+
+1. Use `GITHUB_TOKEN` or `GH_TOKEN` if one is set.
+2. Otherwise use the GitHub CLI (`gh`).
+3. If `gh` is not logged in and the terminal is interactive, prompt for
+   `gh auth login --hostname github.com --web`.
+4. In non-interactive environments, print a clear login/token instruction instead
+   of hanging on a prompt.
 
 ### Run against a local model on a Mac M2 with 16GB RAM
 

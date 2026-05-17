@@ -25,8 +25,8 @@ Conference literature-review workflow preview (--conference-review):
 5. The workflow verifies up to 20 recent/high-citation papers through scholarly indexes.
 6. Two reviewer agents independently produce analysis, limitations, and future directions.
 7. In interactive mode, follow-ups can read a paper, find code/data, create or
-   clone a reproduction repo, optionally create a GitHub repo, and scaffold
-   dummy-data tests before implementation.
+   clone a reproduction repo, optionally create a GitHub repo through the local
+   GitHub plugin, and scaffold dummy-data tests before implementation.
 """
 
 
