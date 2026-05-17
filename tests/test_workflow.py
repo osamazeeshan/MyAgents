@@ -507,3 +507,21 @@ def test_prepare_paper_coding_environment_uses_unique_paths(tmp_path, monkeypatc
     assert "Paper-A-coding-lab-2" in second
     assert (tmp_path / "Paper-A-coding-lab").exists()
     assert (tmp_path / "Paper-A-coding-lab-2").exists()
+
+
+def test_run_paper_coding_agent_returns_setup_help_when_model_missing(tmp_path, monkeypatch) -> None:
+    import asyncio
+    import research_agents.workflow as workflow
+
+    async def fake_runner(*args: object, **kwargs: object) -> object:
+        raise RuntimeError("model 'qwen2.5-coder:7b' not found")
+
+    monkeypatch.setattr(workflow, "REPRODUCTION_REPOS_DIR", tmp_path)
+    monkeypatch.setattr(workflow.Runner, "run", fake_runner)
+
+    output = asyncio.run(workflow.run_paper_coding_agent("Paper B"))
+
+    assert "# Coding Console" in output
+    assert "# Coding Model Setup Required" in output
+    assert "ollama pull qwen2.5-coder:7b" in output
+    assert (tmp_path / "Paper-B-coding-lab").exists()

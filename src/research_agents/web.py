@@ -310,7 +310,7 @@ def build_home_page() -> str:
             <input id="paperIdentifier" placeholder="Paper ID or title (for example arXiv:1706.03762 or Attention Is All You Need)" />
             <textarea id="codingGoal" placeholder="Implementation goal, target framework, repo constraints, or dataset details."></textarea>
             <textarea id="ideaStream" placeholder="Optional: LLM idea prompts, variants to try, ablations, metrics, or links to explore."></textarea>
-            <div class="coding-model-note">Recommended free local model for Mac M2 16GB: <b>coding · qwen2.5-coder:7b</b>. Coding mode auto-selects it when available.</div>
+            <div class="coding-model-note">Recommended free local model for Mac M2 16GB: <b>coding · qwen2.5-coder:7b</b>. Install with <code>ollama pull qwen2.5-coder:7b</code>, then select it; coding mode will not force an unavailable model.</div>
             <div class="coding-console" id="codingConsole" aria-live="polite"><span class="muted">Coding console appears here when a coding request starts.</span></div>
           </div>
           <div class="conference-fields" id="conferenceFields">
@@ -433,11 +433,6 @@ def build_home_page() -> str:
       consoleBox.scrollTop = consoleBox.scrollHeight;
     }}
     function appendCodingConsole(line) {{ setCodingConsole(($('codingConsole').textContent + '\\n' + line).trim()); }}
-    function preferCodingModel() {{
-      const choice = $('modelChoice');
-      const codingOption = Array.from(choice.options).find(option => option.value === 'coding');
-      if (codingOption) {{ choice.value = 'coding'; $('model').textContent = codingOption.textContent.split(' · ').pop(); }}
-    }}
     function activateMode(mode) {{
       const targetMode = mode || 'research';
       document.querySelectorAll('.mode').forEach(b => b.classList.toggle('active', b.dataset.mode === targetMode));
@@ -446,7 +441,7 @@ def build_home_page() -> str:
       $('codingWindow').classList.toggle('visible', state.mode === 'coding');
       $('codingWindow').setAttribute('aria-hidden', state.mode === 'coding' ? 'false' : 'true');
       $('codingState').textContent = state.mode === 'coding' ? 'Ready for coding' : 'Hidden until coding mode';
-      if (state.mode === 'coding') {{ preferCodingModel(); setCodingConsole('Ready. Ask for a paper implementation and I will create a local workspace under reproduction_repos/.'); }}
+      if (state.mode === 'coding') {{ setCodingConsole('Ready. I will use the selected model. For Mac M2 16GB, install qwen2.5-coder:7b and select the coding preset when available.'); }}
       $('prompt').placeholder = state.mode === 'discover' ? 'Describe the domain to scan across recent top conferences…' : state.mode === 'coding' ? 'Ask for implementation steps, code structure, ablations, or new LLM-generated ideas…' : 'Ask a research question, describe a topic, or paste a follow-up…';
     }}
     document.querySelectorAll('.mode').forEach(btn => btn.addEventListener('click', () => activateMode(btn.dataset.mode)));
@@ -479,7 +474,7 @@ def build_home_page() -> str:
           state.lastPaperContext = data.paper_context; state.lastReview = data.review; const chat = currentConversation(); chat.lastPaperContext = data.paper_context; chat.lastReview = data.review; $('context').value = data.paper_context + '\\n\\n' + data.review; remember('agent', data.paper_context + '\\n\\n' + data.review); setOutput(renderTranscript(currentConversation()));
         }} else if (state.mode === 'coding') {{
           $('codingState').textContent = 'Coding agent running…';
-          setCodingConsole(['1. Detect coding request and select the Mac-friendly coding model.', '2. Create a local workspace under reproduction_repos/.', '3. Write environment bootstrap files, source folders, tests, and experiment notes.', '4. Ask the coding model for step-by-step implementation work.']);
+          setCodingConsole(['1. Detect coding request and open the coding workspace.', '2. Use the currently selected model; recommended Mac M2 install: ollama pull qwen2.5-coder:7b.', '3. Create a local workspace under reproduction_repos/.', '4. Write environment bootstrap files, source folders, tests, and experiment notes.', '5. Ask the coding model for step-by-step implementation work.']);
           const data = await postJSON('/api/coding/implement', {{ paper: paperIdentifier, goal: codingGoal || prompt, ideas: ideaStream, memory: memoryContext(), model: selectedModel() }});
           state.lastCoding = data.output; setCodingConsole(data.console || data.output); const chat = currentConversation(); chat.lastCoding = data.output; remember('agent', data.output); setOutput(renderTranscript(currentConversation()));
         }} else {{

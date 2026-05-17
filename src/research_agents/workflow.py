@@ -1320,6 +1320,31 @@ Return:
 """.strip()
 
 
+def _looks_like_missing_model_error(exc: Exception) -> bool:
+    """Return True when a provider reports that the selected model is absent."""
+
+    message = str(exc).lower()
+    return "model" in message and "not found" in message
+
+
+def _format_missing_coding_model_message(workspace_context: str, exc: Exception) -> str:
+    """Return a non-crashing coding response with setup instructions."""
+
+    return (
+        f"{workspace_context}\n\n"
+        "# Coding Model Setup Required\n\n"
+        "The coding workspace was created, but the selected model could not be "
+        "started by the configured provider. The provider reported:\n\n"
+        f"```text\n{exc}\n```\n\n"
+        "For a free Mac M2 16GB setup, install the recommended coding model and "
+        "rerun the request:\n\n"
+        f"```bash\nollama pull {MAC_M2_CODING_MODEL}\n```\n\n"
+        "Alternatively, choose any model that is already installed in your local "
+        "provider from the Model selector and rerun the coding step. The scaffold "
+        "is already available at the workspace path shown above."
+    )
+
+
 async def run_paper_coding_agent(
     paper_identifier: str, implementation_goal: str = "", idea_context: str = ""
 ) -> str:
@@ -1328,13 +1353,18 @@ async def run_paper_coding_agent(
     workspace_context = prepare_paper_coding_environment(
         paper_identifier, implementation_goal, idea_context
     )
-    result = await Runner.run(
-        build_paper_coding_agent(),
-        format_paper_coding_prompt(
-            paper_identifier, implementation_goal, idea_context, workspace_context
-        ),
-        max_turns=16,
-    )
+    try:
+        result = await Runner.run(
+            build_paper_coding_agent(),
+            format_paper_coding_prompt(
+                paper_identifier, implementation_goal, idea_context, workspace_context
+            ),
+            max_turns=16,
+        )
+    except Exception as exc:
+        if _looks_like_missing_model_error(exc):
+            return _format_missing_coding_model_message(workspace_context, exc)
+        raise
     return f"{workspace_context}\n\n# Coding Agent Step-by-Step Plan\n\n{result.final_output}"
 
 

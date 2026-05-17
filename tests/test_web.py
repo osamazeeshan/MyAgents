@@ -119,7 +119,8 @@ def test_home_page_includes_paper_coding_workspace() -> None:
     assert 'id="ideaStream"' in html
     assert 'id="codingConsole"' in html
     assert "qwen2.5-coder:7b" in html
-    assert "preferCodingModel()" in html
+    assert "coding mode will not force an unavailable model" in html
+    assert "preferCodingModel" not in html
     assert "/api/coding/implement" in html
     assert "state.mode === 'coding'" in html
     assert "codingWindow').classList.toggle('visible'" in html
