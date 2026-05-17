@@ -240,5 +240,15 @@ def test_coding_workspace_publish_api_creates_remote_and_pushes(tmp_path, monkey
 
     assert result["published"] is True
     assert result["pushed"] is True
+    assert result["pull_request_created"] is False
     assert result["html_url"] == str(bare_repo)
-    assert "push -u origin HEAD:main" in result["push_command"]
+    assert result["branch"] == "researchagent-coding-workspace"
+    assert "push -u origin researchagent-coding-workspace" in result["push_command"]
+    refs = subprocess.run(
+        ["git", "for-each-ref", "--format=%(refname:short)", "refs/heads"],
+        cwd=bare_repo,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.splitlines()
+    assert refs == ["main", "researchagent-coding-workspace"]

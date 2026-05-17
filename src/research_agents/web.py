@@ -8,14 +8,18 @@ import html
 import json
 import logging
 import os
+import shutil
 import subprocess
+import tempfile
+import urllib.error
+import urllib.request
 import threading
 import webbrowser
 from pathlib import Path
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
-from urllib.parse import urlencode, urlparse
+from urllib.parse import quote, urlencode, urlparse
 
 from .config import (
     format_local_model_presets,
@@ -554,11 +558,14 @@ def build_home_page() -> str:
       const data = await postJSON('/api/coding/publish', {{ workspace: state.currentWorkspace, repo: repoName, owner, private: privateRepo }});
       const lines = [data.message || 'GitHub publish request finished.'];
       if (data.html_url) lines.push('Repository: ' + data.html_url);
+      if (data.pull_request_url) lines.push('Pull request: ' + data.pull_request_url);
+      if (data.compare_url) lines.push('Create PR page: ' + data.compare_url);
       if (data.create_url) lines.push('Create repo page: ' + data.create_url);
       if (data.push_command) lines.push('Manual push command: ' + data.push_command);
       if (data.error) lines.push('Error: ' + data.error);
       $('runConsole').textContent = lines.join('\\n');
-      if (data.html_url || data.create_url) window.open(data.html_url || data.create_url, '_blank', 'noopener');
+      const publishUrl = data.pull_request_url || data.compare_url || data.html_url || data.create_url;
+      if (publishUrl) window.open(publishUrl, '_blank', 'noopener');
     }}
     function activateMode(mode) {{
       const targetMode = mode || 'research';
@@ -850,50 +857,169 @@ def _github_new_repo_url(
     return "https://github.com/new?" + urlencode(query)
 
 
-def _commit_workspace_changes(root: Path) -> None:
-    """Ensure the generated workspace has a commit containing current files."""
+def _run_git(
+    args: list[str], cwd: Path, *, timeout: int = 60
+) -> subprocess.CompletedProcess[str]:
+    """Run a git command and return the completed process."""
 
-    if not (root / ".git").is_dir():
-        subprocess.run(
-            ["git", "init"], cwd=root, check=True, capture_output=True, text=True
-        )
-    subprocess.run(
-        ["git", "add", "-A"], cwd=root, check=True, capture_output=True, text=True
+    return subprocess.run(
+        ["git", *args],
+        cwd=cwd,
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=timeout,
     )
-    diff = subprocess.run(
-        ["git", "diff", "--cached", "--quiet"],
-        cwd=root,
+
+
+def _copy_workspace_contents_for_publish(source: Path, destination: Path) -> None:
+    """Copy generated workspace files into a temporary publish checkout."""
+
+    ignored = {".git", ".venv", "__pycache__", ".pytest_cache"}
+    for item in source.iterdir():
+        if item.name in ignored:
+            continue
+        target = destination / item.name
+        if item.is_dir():
+            shutil.copytree(
+                item,
+                target,
+                ignore=shutil.ignore_patterns("__pycache__", ".pytest_cache"),
+            )
+        else:
+            shutil.copy2(item, target)
+
+
+def _github_repo_slug(html_url: str) -> str:
+    """Return owner/repo for normal GitHub URLs, otherwise an empty string."""
+
+    parsed = urlparse(html_url)
+    if parsed.netloc.lower() != "github.com":
+        return ""
+    parts = [part for part in parsed.path.strip("/").split("/") if part]
+    if len(parts) < 2:
+        return ""
+    return "/".join(parts[:2])
+
+
+def _github_compare_url(html_url: str, branch: str) -> str:
+    """Return the browser URL for creating a PR from the pushed branch."""
+
+    if not _github_repo_slug(html_url):
+        return ""
+    return f"{html_url.rstrip('/')}/compare/main...{quote(branch)}?expand=1"
+
+
+def _create_github_pull_request(
+    html_url: str, branch: str, title: str, body: str
+) -> str:
+    """Create a GitHub pull request when token or gh CLI auth is available."""
+
+    slug = _github_repo_slug(html_url)
+    if not slug:
+        return ""
+
+    token = os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN")
+    if token:
+        request = urllib.request.Request(
+            f"https://api.github.com/repos/{slug}/pulls",
+            data=json.dumps(
+                {"title": title, "head": branch, "base": "main", "body": body}
+            ).encode("utf-8"),
+            headers={
+                "Accept": "application/vnd.github+json",
+                "Authorization": f"Bearer {token}",
+                "Content-Type": "application/json",
+                "User-Agent": "ResearchAgent/0.1",
+                "X-GitHub-Api-Version": "2022-11-28",
+            },
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=30) as response:
+                data = json.loads(response.read().decode("utf-8"))
+        except (urllib.error.HTTPError, urllib.error.URLError):
+            return ""
+        html_pr_url = data.get("html_url")
+        return html_pr_url if isinstance(html_pr_url, str) else ""
+
+    if shutil.which("gh") is None:
+        return ""
+    result = subprocess.run(
+        [
+            "gh",
+            "pr",
+            "create",
+            "--repo",
+            slug,
+            "--base",
+            "main",
+            "--head",
+            branch,
+            "--title",
+            title,
+            "--body",
+            body,
+        ],
         check=False,
         capture_output=True,
         text=True,
+        timeout=60,
     )
-    if diff.returncode == 1:
-        subprocess.run(
-            [
-                "git",
-                "-c",
-                "user.name=ResearchAgent",
-                "-c",
-                "user.email=researchagent@example.com",
-                "commit",
-                "-m",
-                "Publish coding workspace",
-            ],
-            cwd=root,
-            check=True,
-            capture_output=True,
-            text=True,
+    if result.returncode != 0:
+        return ""
+    return result.stdout.strip().splitlines()[-1] if result.stdout.strip() else ""
+
+
+def _push_workspace_pull_request_branch(root: Path, html_url: str) -> dict[str, str]:
+    """Push workspace files to a PR branch, using main as a minimal base."""
+
+    branch = "researchagent-coding-workspace"
+    with tempfile.TemporaryDirectory(prefix="researchagent-publish-") as tmpdir:
+        publish_root = Path(tmpdir)
+        _run_git(["init", "--initial-branch", "main"], publish_root)
+        _run_git(["config", "user.name", "ResearchAgent"], publish_root)
+        _run_git(["config", "user.email", "researchagent@example.com"], publish_root)
+        (publish_root / "README.md").write_text(
+            "# ResearchAgent coding workspace\n\n"
+            "Open the pull request branch to review generated code.\n",
+            encoding="utf-8",
         )
-    elif diff.returncode != 0:
-        raise RuntimeError(diff.stderr.strip() or "git diff failed")
+        _run_git(["add", "README.md"], publish_root)
+        _run_git(
+            ["commit", "-m", "Initialize repository for coding workspace PR"],
+            publish_root,
+        )
+        _run_git(["remote", "add", "origin", html_url], publish_root)
+        _run_git(["push", "-u", "origin", "main"], publish_root)
+        _run_git(["checkout", "-b", branch], publish_root)
+        _copy_workspace_contents_for_publish(root, publish_root)
+        _run_git(["add", "-A"], publish_root)
+        _run_git(["commit", "-m", "Add ResearchAgent coding workspace"], publish_root)
+        _run_git(["push", "-u", "origin", branch], publish_root)
+
+    compare_url = _github_compare_url(html_url, branch)
+    pull_request_url = _create_github_pull_request(
+        html_url,
+        branch,
+        "Add ResearchAgent coding workspace",
+        "This PR publishes the files generated and edited in the ResearchAgent "
+        "coding workspace.",
+    )
+    return {
+        "branch": branch,
+        "compare_url": compare_url,
+        "pull_request_url": pull_request_url,
+        "push_command": f"git push -u origin {branch}",
+    }
 
 
 def _publish_workspace_to_github(
     workspace: str, repo_name: str, owner: str = "", private: bool = False
 ) -> dict[str, Any]:
-    """Create a GitHub repository with the plugin and push workspace files."""
+    """Create a GitHub repository, push a branch, and open/create a PR."""
 
-    from .workflow import _add_github_remote, create_github_repository
+    from .workflow import create_github_repository
 
     root = _resolve_workspace(workspace)
     safe_repo_name = repo_name.strip() or root.name
@@ -910,50 +1036,53 @@ def _publish_workspace_to_github(
         return {
             "published": False,
             "pushed": False,
+            "pull_request_created": False,
             "create_url": create_url,
             "error": str(exc),
             "message": (
                 "Could not create the repository automatically. A GitHub repo "
-                "creation page was opened; create the repo there, then add it "
-                "as a remote and push the workspace."
+                "creation page was opened; create the repo there, then push a "
+                "branch and open a pull request."
             ),
         }
 
-    remote_name = "origin"
-    push_command = f"git -C {root} push -u {remote_name} HEAD:main"
     try:
-        _commit_workspace_changes(root)
-        remote_name = _add_github_remote(root, html_url)
-        push_command = f"git -C {root} push -u {remote_name} HEAD:main"
-        subprocess.run(
-            ["git", "push", "-u", remote_name, "HEAD:main"],
-            cwd=root,
-            check=True,
-            capture_output=True,
-            text=True,
-            timeout=60,
-        )
+        pr_result = _push_workspace_pull_request_branch(root, html_url)
     except Exception as exc:
+        compare_url = _github_compare_url(html_url, "researchagent-coding-workspace")
         return {
             "published": True,
             "pushed": False,
+            "pull_request_created": False,
             "html_url": html_url,
             "create_url": create_url,
-            "push_command": push_command,
+            "compare_url": compare_url,
             "error": str(exc),
             "message": (
-                "GitHub repository was created, but automatic push failed. "
-                "Run the manual push command from a terminal with GitHub auth."
+                "GitHub repository was created, but pushing the pull request "
+                "branch failed. Check GitHub auth and push the workspace branch "
+                "manually."
             ),
         }
 
+    pull_request_url = pr_result.get("pull_request_url", "")
+    compare_url = pr_result.get("compare_url", "")
     return {
         "published": True,
         "pushed": True,
+        "pull_request_created": bool(pull_request_url),
         "html_url": html_url,
-        "push_command": push_command,
-        "message": "Published the coding workspace to GitHub and pushed all files.",
+        "branch": pr_result["branch"],
+        "compare_url": compare_url,
+        "pull_request_url": pull_request_url,
+        "push_command": pr_result["push_command"],
+        "message": (
+            "Published the coding workspace to a GitHub pull request."
+            if pull_request_url
+            else "Pushed the coding workspace branch; open the create-PR page to finish the pull request."
+        ),
     }
+
 
 
 async def handle_api_request(path: str, payload: dict[str, Any]) -> dict[str, Any]:
