@@ -31,9 +31,9 @@ research-agents --interactive "Map the current debates around retrieval-augmente
 ```
 
 
-### Agentarium web interface
+### YourResearchGuide web interface
 
-Prefer a browser instead of the terminal? Launch **Agentarium**, a single-page web console for the research-agent crew:
+Prefer a browser instead of the terminal? Launch **YourResearchGuide**, a single-page web console for the research-agent crew:
 
 ```bash
 research-agents --web
@@ -41,7 +41,7 @@ research-agents --web
 research-agents-web --open
 ```
 
-Agentarium is the suggested name for the interface: it frames the app as a glasshouse/observatory where the orchestrator, planner, literature scout, critical reviewer, and conference-review crew can grow ideas together. The UI includes launchpad prompts, runtime model/provider status, local model presets, and four agent modes:
+YourResearchGuide is the renamed browser workspace for the interface: it frames the app as a helpful research companion that keeps your saved conversations, launchpad prompts, and specialist agent workflows close at hand. The UI includes launchpad prompts, runtime model/provider status, local model presets, and four agent modes:
 
 - **Ask the agent crew** for the standard orchestrated research workflow.
 - **Discover conference topics** for recent top-venue topic scouting.

@@ -244,7 +244,7 @@ def test_interactive_conference_review_supports_paper_to_repo_path(monkeypatch, 
     assert (tmp_path / "paper-a-repro" / "README.md").exists()
 
 
-def test_agentarium_home_page_includes_name_and_modes() -> None:
+def test_web_home_page_includes_name_and_modes() -> None:
     from research_agents.web import APP_NAME, build_home_page
 
     html = build_home_page()
@@ -256,7 +256,7 @@ def test_agentarium_home_page_includes_name_and_modes() -> None:
     assert "Conference follow-up" in html
 
 
-def test_agentarium_requires_prompt_for_research_api() -> None:
+def test_web_requires_prompt_for_research_api() -> None:
     import asyncio
     import pytest
     from research_agents.web import handle_api_request
@@ -265,7 +265,7 @@ def test_agentarium_requires_prompt_for_research_api() -> None:
         asyncio.run(handle_api_request("/api/research", {"prompt": ""}))
 
 
-def test_agentarium_research_api_delegates_to_workflow(monkeypatch) -> None:
+def test_web_research_api_delegates_to_workflow(monkeypatch) -> None:
     import asyncio
     import research_agents.workflow as workflow
     from research_agents.web import handle_api_request
@@ -281,7 +281,7 @@ def test_agentarium_research_api_delegates_to_workflow(monkeypatch) -> None:
     assert result == {"output": "mapped"}
 
 
-def test_agentarium_conference_review_api_chains_paper_search_and_review(monkeypatch) -> None:
+def test_web_conference_review_api_chains_paper_search_and_review(monkeypatch) -> None:
     import asyncio
     import research_agents.workflow as workflow
     from research_agents.web import handle_api_request

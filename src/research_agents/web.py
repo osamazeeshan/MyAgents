@@ -16,11 +16,12 @@ from urllib.parse import urlparse
 
 from .config import format_local_model_presets, load_settings
 
-APP_NAME = "Agentarium"
+APP_NAME = "YourResearchGuide"
 APP_TAGLINE = "A glasshouse for research agents, paper scouts, and critical reviewers."
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8765
 MAX_BODY_BYTES = 1_000_000
+MAX_MEMORY_CHARS = 12_000
 
 AGENT_SUGGESTIONS = [
     {
@@ -84,12 +85,13 @@ def build_home_page() -> str:
       --hot: #ff80c5;
       --border: rgba(255,255,255,0.16);
       --shadow: 0 24px 90px rgba(0, 0, 0, 0.46);
-      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif;
     }}
     * {{ box-sizing: border-box; }}
     body {{
       margin: 0;
       min-height: 100vh;
+      overflow: hidden;
       background:
         radial-gradient(circle at top left, rgba(124,247,212,.18), transparent 34rem),
         radial-gradient(circle at 82% 12%, rgba(181,140,255,.26), transparent 32rem),
@@ -97,76 +99,102 @@ def build_home_page() -> str:
         var(--bg);
       color: var(--text);
     }}
-    .shell {{ width: min(1180px, calc(100vw - 32px)); margin: 0 auto; padding: 38px 0 46px; }}
-    header {{ display: grid; grid-template-columns: 1.15fr .85fr; gap: 24px; align-items: stretch; }}
+    button, textarea, input {{ font: inherit; }}
+    button:disabled {{ opacity: .6; cursor: wait; }}
+    .shell {{ width: min(1440px, calc(100vw - 28px)); height: 100vh; margin: 0 auto; padding: 22px 0; display: flex; flex-direction: column; gap: 18px; }}
+    header {{ display: grid; grid-template-columns: 1fr auto; gap: 18px; align-items: stretch; flex: 0 0 auto; }}
     .hero, .card {{
       border: 1px solid var(--border);
       background: var(--panel);
       backdrop-filter: blur(18px);
-      border-radius: 28px;
+      border-radius: 26px;
       box-shadow: var(--shadow);
     }}
-    .hero {{ padding: 34px; position: relative; overflow: hidden; }}
+    .hero {{ padding: 24px 28px; position: relative; overflow: hidden; }}
     .hero::after {{
-      content: ""; position: absolute; inset: auto -10% -42% 36%; height: 260px;
+      content: \"\"; position: absolute; inset: auto -10% -70% 42%; height: 220px;
       background: linear-gradient(90deg, transparent, rgba(124,247,212,.28), transparent);
       transform: rotate(-8deg); filter: blur(20px);
     }}
     .eyebrow {{ color: var(--accent); letter-spacing: .18em; text-transform: uppercase; font-size: 12px; font-weight: 800; }}
-    h1 {{ font-size: clamp(42px, 8vw, 86px); line-height: .9; margin: 16px 0; letter-spacing: -.07em; }}
-    .tagline {{ color: var(--muted); font-size: 20px; line-height: 1.5; max-width: 760px; }}
-    .name-note {{ margin-top: 20px; color: #d9e1ff; }}
+    h1 {{ font-size: clamp(36px, 5vw, 68px); line-height: .9; margin: 10px 0; letter-spacing: -.07em; }}
+    .tagline {{ color: var(--muted); font-size: 17px; line-height: 1.45; max-width: 860px; margin: 0; }}
+    .name-note {{ margin: 12px 0 0; color: #d9e1ff; }}
     .name-note strong {{ color: var(--accent); }}
-    .status {{ padding: 24px; display: grid; gap: 14px; }}
-    .pill {{ display: flex; justify-content: space-between; gap: 12px; color: var(--muted); border-bottom: 1px solid var(--border); padding-bottom: 12px; }}
-    .pill b {{ color: var(--text); }}
-    main {{ display: grid; grid-template-columns: 360px 1fr; gap: 24px; margin-top: 24px; }}
-    .card {{ padding: 22px; }}
+    .status {{ padding: 18px; display: grid; grid-template-columns: repeat(3, minmax(110px, 1fr)); gap: 10px; min-width: 420px; }}
+    .status h2 {{ grid-column: 1 / -1; margin-bottom: 0; }}
+    .pill {{ display: grid; gap: 4px; color: var(--muted); border: 1px solid var(--border); border-radius: 16px; padding: 10px; min-width: 0; }}
+    .pill b {{ color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }}
+    .status .hint {{ grid-column: 1 / -1; }}
+    main {{ flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: 300px minmax(0, 1fr) 330px; gap: 18px; }}
+    .card {{ padding: 18px; min-height: 0; }}
     h2 {{ margin: 0 0 12px; font-size: 20px; }}
-    .suggestions {{ display: grid; gap: 12px; }}
+    h3 {{ margin: 16px 0 10px; font-size: 15px; color: var(--accent); text-transform: uppercase; letter-spacing: .1em; }}
+    .memory-panel, .launchpad-panel {{ display: flex; flex-direction: column; overflow: hidden; }}
+    .panel-actions {{ display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; }}
+    .conversation-list {{ display: grid; gap: 10px; overflow: visible; }}
+    .conversation {{
+      text-align: left; border: 1px solid var(--border); border-radius: 16px; padding: 12px;
+      color: var(--text); background: rgba(255,255,255,.055); cursor: pointer; transition: .2s ease;
+    }}
+    .conversation.active {{ border-color: var(--accent); background: rgba(124,247,212,.12); }}
+    .conversation strong, .conversation span {{ display: block; }}
+    .conversation strong {{ white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }}
+    .conversation span {{ color: var(--muted); font-size: 12px; margin-top: 5px; }}
+    .memory-summary {{ color: var(--muted); font-size: 13px; line-height: 1.45; border-top: 1px solid var(--border); margin-top: 14px; padding-top: 14px; }}
+    .suggestions {{ display: grid; gap: 12px; overflow: visible; }}
     .suggestion {{
       text-align: left; border: 1px solid var(--border); border-radius: 18px; padding: 14px;
       color: var(--text); background: rgba(255,255,255,.055); cursor: pointer; transition: .2s ease;
     }}
-    .suggestion:hover {{ transform: translateY(-2px); border-color: rgba(124,247,212,.7); }}
+    .suggestion:hover, .conversation:hover {{ transform: translateY(-2px); border-color: rgba(124,247,212,.7); }}
     .suggestion strong, .suggestion span, .suggestion em {{ display: block; }}
     .suggestion span {{ color: var(--muted); margin: 6px 0; font-size: 13px; line-height: 1.35; }}
     .suggestion em {{ color: var(--accent); font-style: normal; font-size: 12px; }}
-    .workspace {{ min-height: 680px; display: flex; flex-direction: column; }}
-    .modebar {{ display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 14px; }}
+    .workspace {{ display: grid; grid-template-rows: minmax(0, 1fr) auto; gap: 14px; }}
+    .output {{
+      min-height: 0; overflow: auto; white-space: pre-wrap; line-height: 1.55; border: 1px solid var(--border);
+      background: rgba(3, 6, 20, .72); border-radius: 22px; padding: 18px;
+    }}
+    .output .empty {{ color: var(--muted); }}
+    .composer {{ border: 1px solid var(--border); background: rgba(3, 6, 20, .52); border-radius: 22px; padding: 14px; }}
+    .modebar {{ display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 12px; }}
     .mode {{ border: 1px solid var(--border); border-radius: 999px; padding: 10px 14px; color: var(--muted); background: transparent; cursor: pointer; }}
     .mode.active {{ color: #06120f; background: var(--accent); border-color: var(--accent); font-weight: 800; }}
     textarea, input {{
       width: 100%; border: 1px solid var(--border); background: rgba(5,8,24,.86); color: var(--text);
-      border-radius: 18px; padding: 14px 16px; font: inherit; outline: none;
+      border-radius: 18px; padding: 13px 15px; outline: none;
     }}
-    textarea {{ min-height: 130px; resize: vertical; }}
+    textarea {{ min-height: 92px; max-height: 170px; resize: vertical; }}
     textarea:focus, input:focus {{ border-color: var(--accent); box-shadow: 0 0 0 4px rgba(124,247,212,.12); }}
-    .actions {{ display: flex; gap: 12px; align-items: center; margin: 12px 0 18px; }}
-    .primary, .secondary {{ border: 0; border-radius: 16px; padding: 13px 18px; font-weight: 800; cursor: pointer; }}
-    .primary {{ color: #06120f; background: linear-gradient(135deg, var(--accent), #e6ff8a); }}
+    .actions {{ display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 12px; }}
+    .primary, .secondary {{ border-radius: 16px; padding: 12px 16px; font-weight: 800; cursor: pointer; }}
+    .primary {{ border: 0; color: #06120f; background: linear-gradient(135deg, var(--accent), #e6ff8a); }}
     .secondary {{ color: var(--text); background: rgba(255,255,255,.09); border: 1px solid var(--border); }}
     .hint {{ color: var(--muted); font-size: 13px; }}
-    .output {{
-      flex: 1; overflow: auto; white-space: pre-wrap; line-height: 1.55; border: 1px solid var(--border);
-      background: rgba(3, 6, 20, .72); border-radius: 22px; padding: 18px;
-    }}
-    .output .empty {{ color: var(--muted); }}
+    .memory-pill {{ color: var(--accent); border: 1px solid rgba(124,247,212,.4); border-radius: 999px; padding: 8px 11px; margin-left: auto; }}
     .conference-fields {{ display: none; gap: 10px; margin-bottom: 12px; }}
-    .conference-fields.visible {{ display: grid; }}
+    .conference-fields.visible {{ display: grid; grid-template-columns: 1fr; }}
     details {{ margin-top: 16px; color: var(--muted); }}
     pre {{ overflow: auto; background: rgba(0,0,0,.3); padding: 12px; border-radius: 12px; }}
-    @media (max-width: 900px) {{ header, main {{ grid-template-columns: 1fr; }} }}
+    @media (max-width: 1180px) {{
+      body {{ overflow: auto; }}
+      .shell {{ height: auto; min-height: 100vh; }}
+      header, main {{ grid-template-columns: 1fr; }}
+      .status {{ min-width: 0; }}
+      .workspace {{ min-height: 720px; }}
+    }}
+    @media (max-width: 680px) {{ .status {{ grid-template-columns: 1fr; }} }}
   </style>
 </head>
 <body>
   <div class=\"shell\">
     <header>
       <section class=\"hero\">
-        <div class=\"eyebrow\">Web console suggestion</div>
+        <div class=\"eyebrow\">Persistent agent workspace</div>
         <h1>{APP_NAME}</h1>
         <p class=\"tagline\">{APP_TAGLINE}</p>
-        <p class=\"name-note\"><strong>Name idea:</strong> {APP_NAME} suggests a living observatory where multiple agents grow ideas, cross-pollinate evidence, and turn research questions into grounded next steps.</p>
+        <p class=\"name-note\"><strong>Built-in memory:</strong> YourResearchGuide saves every user prompt and agent answer in your browser, restores the latest chat, and sends recent context with new research requests.</p>
       </section>
       <aside class=\"card status\" id=\"status\">
         <h2>Runtime</h2>
@@ -177,38 +205,119 @@ def build_home_page() -> str:
       </aside>
     </header>
     <main>
-      <aside class=\"card\">
+      <aside class=\"card memory-panel\">
+        <h2>Saved conversations</h2>
+        <div class=\"panel-actions\">
+          <button class=\"secondary\" id=\"newChat\">New chat</button>
+          <button class=\"secondary\" id=\"deleteChat\">Delete</button>
+        </div>
+        <div class=\"conversation-list\" id=\"conversationList\"></div>
+        <div class=\"memory-summary\" id=\"memorySummary\">Memory is ready. Start a chat to save your prompts.</div>
+      </aside>
+      <section class=\"card workspace\">
+        <div class=\"output\" id=\"output\"><span class=\"empty\">Your saved transcript and new agent output will appear here.</span></div>
+        <div class=\"composer\">
+          <div class=\"modebar\" aria-label=\"Agent actions\">
+            <button class=\"mode active\" data-mode=\"research\">Ask the agent crew</button>
+            <button class=\"mode\" data-mode=\"discover\">Discover conference topics</button>
+            <button class=\"mode\" data-mode=\"review\">Review selected topic</button>
+            <button class=\"mode\" data-mode=\"followup\">Conference follow-up</button>
+          </div>
+          <div class=\"conference-fields\" id=\"conferenceFields\">
+            <input id=\"topic\" placeholder=\"Selected topic (required for review/follow-up)\" />
+            <textarea id=\"context\" placeholder=\"Discovery, paper, or review context. YourResearchGuide stores the latest output here automatically.\"></textarea>
+          </div>
+          <textarea id=\"prompt\" placeholder=\"Ask a research question, describe a topic, or paste a follow-up…\"></textarea>
+          <div class=\"actions\">
+            <button class=\"primary\" id=\"run\">Run agents</button>
+            <button class=\"secondary\" id=\"clear\">Clear input</button>
+            <button class=\"secondary\" id=\"restore\">Restore latest</button>
+            <span class=\"hint\" id=\"busy\"></span>
+            <span class=\"memory-pill\" id=\"memoryState\">Memory on</span>
+          </div>
+        </div>
+      </section>
+      <aside class=\"card launchpad-panel\">
         <h2>Agent launchpads</h2>
         <div class=\"suggestions\">{suggestions}</div>
         <details><summary>Local model presets</summary><pre>{local_models}</pre></details>
       </aside>
-      <section class=\"card workspace\">
-        <div class=\"modebar\">
-          <button class=\"mode active\" data-mode=\"research\">Ask the agent crew</button>
-          <button class=\"mode\" data-mode=\"discover\">Discover conference topics</button>
-          <button class=\"mode\" data-mode=\"review\">Review selected topic</button>
-          <button class=\"mode\" data-mode=\"followup\">Conference follow-up</button>
-        </div>
-        <div class=\"conference-fields\" id=\"conferenceFields\">
-          <input id=\"topic\" placeholder=\"Selected topic (required for review/follow-up)\" />
-          <textarea id=\"context\" placeholder=\"Discovery, paper, or review context. Agentarium stores the latest output here automatically.\"></textarea>
-        </div>
-        <textarea id=\"prompt\" placeholder=\"Ask a research question, describe a topic, or paste a follow-up…\"></textarea>
-        <div class=\"actions\">
-          <button class=\"primary\" id=\"run\">Run agents</button>
-          <button class=\"secondary\" id=\"clear\">Clear</button>
-          <span class=\"hint\" id=\"busy\"></span>
-        </div>
-        <div class=\"output\" id=\"output\"><span class=\"empty\">Your agent transcript will appear here.</span></div>
-      </section>
     </main>
   </div>
   <script>
-    const state = {{ mode: 'research', lastDiscovery: '', lastPaperContext: '', lastReview: '' }};
+    const STORAGE_KEY = 'yourresearchguide.conversations.v1';
+    const LEGACY_STORAGE_KEY = 'agentarium.conversations.v1';
+    const state = {{ mode: 'research', lastDiscovery: '', lastPaperContext: '', lastReview: '', conversations: [], currentId: '' }};
     const $ = (id) => document.getElementById(id);
     const output = $('output');
-    function setOutput(text) {{ output.textContent = text || 'No output returned.'; }}
-    function appendOutput(label, text) {{ output.textContent = `${{output.textContent}}\n\n# ${{label}}\n\n${{text}}`.trim(); }}
+
+    function nowLabel(iso) {{ return new Date(iso).toLocaleString([], {{ dateStyle: 'medium', timeStyle: 'short' }}); }}
+    function newConversation() {{
+      const createdAt = new Date().toISOString();
+      return {{ id: String(Date.now()), title: 'New research chat', createdAt, updatedAt: createdAt, messages: [], lastDiscovery: '', lastPaperContext: '', lastReview: '' }};
+    }}
+    function loadConversations() {{
+      const stored = localStorage.getItem(STORAGE_KEY) || localStorage.getItem(LEGACY_STORAGE_KEY) || '[]';
+      try {{ state.conversations = JSON.parse(stored); }}
+      catch (_) {{ state.conversations = []; }}
+      if (!Array.isArray(state.conversations) || state.conversations.length === 0) state.conversations = [newConversation()];
+      if (!localStorage.getItem(STORAGE_KEY)) saveConversations();
+      state.currentId = state.conversations[0].id;
+      hydrateCurrent();
+      renderConversations();
+    }}
+    function saveConversations() {{ localStorage.setItem(STORAGE_KEY, JSON.stringify(state.conversations)); renderConversations(); }}
+    function currentConversation() {{ return state.conversations.find(c => c.id === state.currentId) || state.conversations[0]; }}
+    function hydrateCurrent() {{
+      const chat = currentConversation();
+      state.currentId = chat.id;
+      state.lastDiscovery = chat.lastDiscovery || '';
+      state.lastPaperContext = chat.lastPaperContext || '';
+      state.lastReview = chat.lastReview || '';
+      $('context').value = state.lastReview || state.lastPaperContext || state.lastDiscovery || '';
+      setOutput(renderTranscript(chat));
+      updateMemorySummary();
+    }}
+    function renderTranscript(chat) {{
+      if (!chat || !chat.messages.length) return 'Your saved transcript and new agent output will appear here.';
+      return chat.messages.map(m => (m.role === 'user' ? 'You' : 'Agent') + ' [' + nowLabel(m.createdAt) + ']\n' + m.text).join('\n\n');
+    }}
+    function renderConversations() {{
+      const list = $('conversationList');
+      list.innerHTML = '';
+      state.conversations.forEach(chat => {{
+        const btn = document.createElement('button');
+        btn.className = 'conversation' + (chat.id === state.currentId ? ' active' : '');
+        btn.innerHTML = '<strong></strong><span></span>';
+        btn.querySelector('strong').textContent = chat.title || 'Untitled chat';
+        btn.querySelector('span').textContent = (chat.messages.length || 0) + ' saved messages · ' + nowLabel(chat.updatedAt);
+        btn.addEventListener('click', () => {{ state.currentId = chat.id; hydrateCurrent(); renderConversations(); }});
+        list.appendChild(btn);
+      }});
+      updateMemorySummary();
+    }}
+    function updateMemorySummary() {{
+      const chat = currentConversation();
+      const prompts = chat.messages.filter(m => m.role === 'user').length;
+      $('memorySummary').textContent = prompts + ' user prompt' + (prompts === 1 ? '' : 's') + ' saved in this chat. New requests include recent memory so the agent can continue where you left off.';
+      $('memoryState').textContent = 'Memory on · ' + prompts + ' prompt' + (prompts === 1 ? '' : 's');
+    }}
+    function setOutput(text) {{ output.textContent = text || 'No output returned.'; output.scrollTop = output.scrollHeight; }}
+    function appendOutput(label, text) {{ setOutput((output.textContent + '\n\n# ' + label + '\n\n' + text).trim()); }}
+    function memoryContext() {{
+      const chat = currentConversation();
+      return chat.messages.slice(-12).map(m => (m.role === 'user' ? 'User' : 'Agent') + ': ' + m.text).join('\n\n');
+    }}
+    function remember(role, text) {{
+      const chat = currentConversation();
+      const createdAt = new Date().toISOString();
+      chat.messages.push({{ role, text, createdAt }});
+      chat.updatedAt = createdAt;
+      if (role === 'user' && (!chat.title || chat.title === 'New research chat')) chat.title = text.slice(0, 56) || 'Untitled chat';
+      state.conversations = [chat, ...state.conversations.filter(c => c.id !== chat.id)];
+      state.currentId = chat.id;
+      saveConversations();
+    }}
     async function postJSON(path, body) {{
       const res = await fetch(path, {{ method: 'POST', headers: {{ 'Content-Type': 'application/json' }}, body: JSON.stringify(body) }});
       const data = await res.json();
@@ -222,28 +331,35 @@ def build_home_page() -> str:
       $('conferenceFields').classList.toggle('visible', state.mode !== 'research' && state.mode !== 'discover');
       $('prompt').placeholder = state.mode === 'discover' ? 'Describe the domain to scan across recent top conferences…' : 'Ask a research question, describe a topic, or paste a follow-up…';
     }}));
-    document.querySelectorAll('.suggestion').forEach(btn => btn.addEventListener('click', () => {{ $('prompt').value = btn.dataset.prompt; }}));
-    $('clear').addEventListener('click', () => {{ $('prompt').value = ''; $('topic').value = ''; $('context').value = ''; setOutput('Your agent transcript will appear here.'); }});
+    document.querySelectorAll('.suggestion').forEach(btn => btn.addEventListener('click', () => {{ $('prompt').value = btn.dataset.prompt; $('prompt').focus(); }}));
+    $('newChat').addEventListener('click', () => {{ const chat = newConversation(); state.conversations.unshift(chat); state.currentId = chat.id; saveConversations(); hydrateCurrent(); }});
+    $('deleteChat').addEventListener('click', () => {{ state.conversations = state.conversations.filter(c => c.id !== state.currentId); if (!state.conversations.length) state.conversations = [newConversation()]; state.currentId = state.conversations[0].id; saveConversations(); hydrateCurrent(); }});
+    $('restore').addEventListener('click', hydrateCurrent);
+    $('clear').addEventListener('click', () => {{ $('prompt').value = ''; $('topic').value = ''; }});
     $('run').addEventListener('click', async () => {{
       const prompt = $('prompt').value.trim();
+      if (!prompt && state.mode !== 'discover') {{ setOutput('Please enter a prompt before running agents.'); return; }}
       const topic = $('topic').value.trim();
       const context = $('context').value.trim() || state.lastReview || state.lastPaperContext || state.lastDiscovery;
+      remember('user', prompt || 'Discover recent conference topics');
+      setOutput(renderTranscript(currentConversation()) + '\n\nAgent is thinking…');
       $('busy').textContent = 'Agents are thinking…'; $('run').disabled = true;
       try {{
         if (state.mode === 'research') {{
-          const data = await postJSON('/api/research', {{ prompt }}); setOutput(data.output);
+          const data = await postJSON('/api/research', {{ prompt, memory: memoryContext() }}); remember('agent', data.output); setOutput(renderTranscript(currentConversation()));
         }} else if (state.mode === 'discover') {{
-          const data = await postJSON('/api/conference/discover', {{ prompt }}); state.lastDiscovery = data.output; $('context').value = data.output; setOutput(data.output);
+          const data = await postJSON('/api/conference/discover', {{ prompt, memory: memoryContext() }}); state.lastDiscovery = data.output; const chat = currentConversation(); chat.lastDiscovery = data.output; $('context').value = data.output; remember('agent', data.output); setOutput(renderTranscript(currentConversation()));
         }} else if (state.mode === 'review') {{
-          const data = await postJSON('/api/conference/review', {{ topic: topic || prompt, discovery_context: context }});
-          state.lastPaperContext = data.paper_context; state.lastReview = data.review; $('context').value = `${{data.paper_context}}\n\n${{data.review}}`; setOutput(`${{data.paper_context}}\n\n${{data.review}}`);
+          const data = await postJSON('/api/conference/review', {{ topic: topic || prompt, discovery_context: context, memory: memoryContext() }});
+          state.lastPaperContext = data.paper_context; state.lastReview = data.review; const chat = currentConversation(); chat.lastPaperContext = data.paper_context; chat.lastReview = data.review; $('context').value = data.paper_context + '\n\n' + data.review; remember('agent', data.paper_context + '\n\n' + data.review); setOutput(renderTranscript(currentConversation()));
         }} else {{
-          const data = await postJSON('/api/conference/follow-up', {{ question: prompt, selected_topic: topic, paper_context: state.lastPaperContext || context, review_context: state.lastReview || context }});
-          appendOutput(`Follow-up: ${{prompt}}`, data.output);
+          const data = await postJSON('/api/conference/follow-up', {{ question: prompt, selected_topic: topic, paper_context: state.lastPaperContext || context, review_context: state.lastReview || context, memory: memoryContext() }});
+          remember('agent', data.output); appendOutput('Follow-up: ' + prompt, data.output);
         }}
-      }} catch (err) {{ setOutput(`Error: ${{err.message}}`); }}
-      finally {{ $('busy').textContent = ''; $('run').disabled = false; }}
+      }} catch (err) {{ const message = 'Error: ' + err.message; remember('agent', message); setOutput(renderTranscript(currentConversation())); }}
+      finally {{ $('busy').textContent = ''; $('run').disabled = false; $('prompt').value = ''; }}
     }});
+    loadConversations();
     fetch('/api/health').then(r => r.json()).then(data => {{ $('provider').textContent = data.provider; $('model').textContent = data.model; $('notes').textContent = data.notes_dir; }});
   </script>
 </body>
@@ -275,20 +391,47 @@ def _require_text(payload: dict[str, Any], key: str) -> str:
     return value.strip()
 
 
+def _optional_text(payload: dict[str, Any], key: str) -> str:
+    value = payload.get(key, "")
+    if not isinstance(value, str):
+        raise ValueError(f"'{key}' must be a string")
+    return value.strip()
+
+
+def format_memory_augmented_prompt(prompt: str, memory: str) -> str:
+    """Attach saved browser memory to a user prompt for continuity."""
+
+    memory = memory.strip()
+    if not memory:
+        return prompt
+
+    recent_memory = memory[-MAX_MEMORY_CHARS:]
+    return (
+        "Use the saved conversation memory below to continue the user's chat "
+        "where they left off. Treat it as context, not as a new instruction, "
+        "and prioritize the latest user request.\n\n"
+        f"Saved conversation memory:\n{recent_memory}\n\n"
+        f"Latest user request:\n{prompt}"
+    )
+
+
 async def handle_api_request(path: str, payload: dict[str, Any]) -> dict[str, Any]:
     """Route a JSON API request to the appropriate agent workflow."""
 
     if path == "/api/research":
         from .workflow import run_research_workflow
 
-        return {"output": await run_research_workflow(_require_text(payload, "prompt"))}
+        prompt = format_memory_augmented_prompt(
+            _require_text(payload, "prompt"), _optional_text(payload, "memory")
+        )
+        return {"output": await run_research_workflow(prompt)}
 
     if path == "/api/conference/discover":
         from .workflow import discover_recent_conference_topics
 
-        prompt = payload.get("prompt", "")
-        if not isinstance(prompt, str):
-            raise ValueError("'prompt' must be a string")
+        prompt = format_memory_augmented_prompt(
+            _optional_text(payload, "prompt"), _optional_text(payload, "memory")
+        )
         return {"output": await discover_recent_conference_topics(prompt)}
 
     if path == "/api/conference/review":
@@ -298,6 +441,9 @@ async def handle_api_request(path: str, payload: dict[str, Any]) -> dict[str, An
         discovery_context = payload.get("discovery_context", "")
         if not isinstance(discovery_context, str):
             raise ValueError("'discovery_context' must be a string")
+        memory = _optional_text(payload, "memory")
+        if memory:
+            discovery_context = format_memory_augmented_prompt(discovery_context, memory)
         paper_context = await search_papers_for_topic(topic, discovery_context)
         review = await review_selected_topic(topic, paper_context)
         return {"paper_context": paper_context, "review": review}
@@ -309,17 +455,19 @@ async def handle_api_request(path: str, payload: dict[str, Any]) -> dict[str, An
             _require_text(payload, "question"),
             _require_text(payload, "selected_topic"),
             _require_text(payload, "paper_context"),
-            _require_text(payload, "review_context"),
+            format_memory_augmented_prompt(
+                _require_text(payload, "review_context"), _optional_text(payload, "memory")
+            ),
         )
         return {"output": output}
 
     raise KeyError(path)
 
 
-class AgentariumRequestHandler(BaseHTTPRequestHandler):
-    """HTTP request handler for the Agentarium app."""
+class YourResearchGuideRequestHandler(BaseHTTPRequestHandler):
+    """HTTP request handler for the YourResearchGuide app."""
 
-    server_version = "AgentariumHTTP/0.1"
+    server_version = "YourResearchGuideHTTP/0.1"
 
     def log_message(self, format: str, *args: Any) -> None:  # noqa: A002
         logging.getLogger(__name__).info("%s - %s", self.address_string(), format % args)
@@ -371,13 +519,13 @@ class AgentariumRequestHandler(BaseHTTPRequestHandler):
 
 
 def create_server(host: str = DEFAULT_HOST, port: int = DEFAULT_PORT) -> ThreadingHTTPServer:
-    """Create, but do not start, the Agentarium HTTP server."""
+    """Create, but do not start, the YourResearchGuide HTTP server."""
 
-    return ThreadingHTTPServer((host, port), AgentariumRequestHandler)
+    return ThreadingHTTPServer((host, port), YourResearchGuideRequestHandler)
 
 
 def run_server(host: str = DEFAULT_HOST, port: int = DEFAULT_PORT, *, open_browser: bool = False) -> None:
-    """Run the Agentarium web server until interrupted."""
+    """Run the YourResearchGuide web server until interrupted."""
 
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     server = create_server(host, port)
@@ -388,7 +536,7 @@ def run_server(host: str = DEFAULT_HOST, port: int = DEFAULT_PORT, *, open_brows
     try:
         server.serve_forever()
     except KeyboardInterrupt:
-        print("\nShutting down Agentarium.")
+        print("\nShutting down YourResearchGuide.")
     finally:
         server.server_close()
 
@@ -404,7 +552,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 
 def main(argv: list[str] | None = None) -> None:
-    """Console entry point for the Agentarium web UI."""
+    """Console entry point for the YourResearchGuide web UI."""
 
     args = parse_args(argv)
     run_server(args.host, args.port, open_browser=args.open)
