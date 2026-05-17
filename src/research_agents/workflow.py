@@ -330,7 +330,9 @@ def build_research_orchestrator() -> Agent:
         handoffs=[
             handoff(planner, tool_name_override=build_handoff_tool_name(planner.name)),
             handoff(scout, tool_name_override=build_handoff_tool_name(scout.name)),
-            handoff(reviewer, tool_name_override=build_handoff_tool_name(reviewer.name)),
+            handoff(
+                reviewer, tool_name_override=build_handoff_tool_name(reviewer.name)
+            ),
         ],
     )
 
@@ -790,7 +792,9 @@ def _create_github_repository_with_plugin(
 
     script = _github_repo_creator_plugin_script()
     if not script.exists():
-        raise FileNotFoundError(f"GitHub repo creator plugin script not found: {script}")
+        raise FileNotFoundError(
+            f"GitHub repo creator plugin script not found: {script}"
+        )
 
     with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as output_file:
         output_path = Path(output_file.name)
@@ -818,7 +822,8 @@ def _create_github_repository_with_plugin(
     except subprocess.CalledProcessError as exc:
         stderr = exc.stderr.strip() if exc.stderr else ""
         raise RuntimeError(
-            "GitHub repository creation plugin failed" + (f": {stderr}" if stderr else ".")
+            "GitHub repository creation plugin failed"
+            + (f": {stderr}" if stderr else ".")
         ) from exc
     finally:
         output_path.unlink(missing_ok=True)
@@ -862,13 +867,17 @@ def _create_github_repository_with_token(
             data = json.loads(response.read().decode("utf-8"))
     except urllib.error.HTTPError as exc:  # pragma: no cover - requires live GitHub API
         detail = exc.read().decode("utf-8", errors="replace")
-        raise RuntimeError(f"GitHub repository creation failed: {exc.code} {detail}") from exc
+        raise RuntimeError(
+            f"GitHub repository creation failed: {exc.code} {detail}"
+        ) from exc
     except urllib.error.URLError as exc:  # pragma: no cover - requires network failure
         raise RuntimeError(f"GitHub repository creation failed: {exc.reason}") from exc
 
     html_url = data.get("html_url")
     if not isinstance(html_url, str) or not html_url:
-        raise RuntimeError("GitHub repository creation succeeded but no html_url was returned.")
+        raise RuntimeError(
+            "GitHub repository creation succeeded but no html_url was returned."
+        )
     return html_url
 
 
@@ -937,17 +946,17 @@ def _write_dummy_dataset_scaffold(repo_path: Path, repo_title: str) -> None:
     )
     (repo_path / "pyproject.toml").write_text(
         "[build-system]\n"
-        "requires = [\"hatchling>=1.25\"]\n"
-        "build-backend = \"hatchling.build\"\n\n"
+        'requires = ["hatchling>=1.25"]\n'
+        'build-backend = "hatchling.build"\n\n'
         "[project]\n"
-        f"name = \"{_safe_repo_name(repo_title).lower()}\"\n"
-        "version = \"0.1.0\"\n"
-        "description = \"Clean-room research reproduction scaffold\"\n"
-        "requires-python = \">=3.10\"\n\n"
+        f'name = "{_safe_repo_name(repo_title).lower()}"\n'
+        'version = "0.1.0"\n'
+        'description = "Clean-room research reproduction scaffold"\n'
+        'requires-python = ">=3.10"\n\n'
         "[project.optional-dependencies]\n"
-        "test = [\"pytest>=8\"]\n\n"
+        'test = ["pytest>=8"]\n\n'
         "[tool.hatch.build.targets.wheel]\n"
-        "packages = [\"src/reproduction_baseline\"]\n",
+        'packages = ["src/reproduction_baseline"]\n',
         encoding="utf-8",
     )
     (repo_path / ".gitignore").write_text(
@@ -963,13 +972,13 @@ def _write_dummy_dataset_scaffold(repo_path: Path, repo_title: str) -> None:
         encoding="utf-8",
     )
     (package_dir / "__init__.py").write_text(
-        "\"\"\"Minimal baseline utilities for a paper reproduction scaffold.\"\"\"\n\n"
+        '"""Minimal baseline utilities for a paper reproduction scaffold."""\n\n'
         "from .baseline import DatasetSummary, load_dataset, majority_label\n\n"
-        "__all__ = [\"DatasetSummary\", \"load_dataset\", \"majority_label\"]\n",
+        '__all__ = ["DatasetSummary", "load_dataset", "majority_label"]\n',
         encoding="utf-8",
     )
     (package_dir / "baseline.py").write_text(
-        "\"\"\"Dummy-dataset baseline used to smoke-test reproduction work.\"\"\"\n\n"
+        '"""Dummy-dataset baseline used to smoke-test reproduction work."""\n\n'
         "from __future__ import annotations\n\n"
         "import csv\n"
         "from dataclasses import dataclass\n"
@@ -980,11 +989,11 @@ def _write_dummy_dataset_scaffold(repo_path: Path, repo_title: str) -> None:
         "    labels: tuple[str, ...]\n"
         "    majority: str\n\n\n"
         "def load_dataset(path: str | Path) -> list[dict[str, str]]:\n"
-        "    with Path(path).open(newline=\"\", encoding=\"utf-8\") as handle:\n"
+        '    with Path(path).open(newline="", encoding="utf-8") as handle:\n'
         "        return list(csv.DictReader(handle))\n\n\n"
-        "def majority_label(rows: list[dict[str, str]], label_column: str = \"label\") -> DatasetSummary:\n"
+        'def majority_label(rows: list[dict[str, str]], label_column: str = "label") -> DatasetSummary:\n'
         "    if not rows:\n"
-        "        raise ValueError(\"dataset must contain at least one row\")\n"
+        '        raise ValueError("dataset must contain at least one row")\n'
         "    counts: dict[str, int] = {}\n"
         "    for row in rows:\n"
         "        label = row[label_column]\n"
@@ -993,11 +1002,11 @@ def _write_dummy_dataset_scaffold(repo_path: Path, repo_title: str) -> None:
         "    return DatasetSummary(rows=len(rows), labels=tuple(sorted(counts)), majority=majority)\n\n\n"
         "def main() -> None:\n"
         "    import argparse\n\n"
-        "    parser = argparse.ArgumentParser(description=\"Summarize a reproduction dataset.\")\n"
-        "    parser.add_argument(\"dataset\", type=Path)\n"
+        '    parser = argparse.ArgumentParser(description="Summarize a reproduction dataset.")\n'
+        '    parser.add_argument("dataset", type=Path)\n'
         "    args = parser.parse_args()\n"
         "    print(majority_label(load_dataset(args.dataset)))\n\n\n"
-        "if __name__ == \"__main__\":\n"
+        'if __name__ == "__main__":\n'
         "    main()\n",
         encoding="utf-8",
     )
@@ -1005,12 +1014,12 @@ def _write_dummy_dataset_scaffold(repo_path: Path, repo_title: str) -> None:
         "from pathlib import Path\n\n"
         "from reproduction_baseline import load_dataset, majority_label\n\n\n"
         "def test_dummy_dataset_majority_label() -> None:\n"
-        "    dataset = Path(__file__).resolve().parents[1] / \"data\" / \"dummy_dataset.csv\"\n"
+        '    dataset = Path(__file__).resolve().parents[1] / "data" / "dummy_dataset.csv"\n'
         "    rows = load_dataset(dataset)\n"
         "    summary = majority_label(rows)\n\n"
         "    assert summary.rows == 4\n"
-        "    assert summary.labels == (\"negative\", \"positive\")\n"
-        "    assert summary.majority == \"negative\"\n",
+        '    assert summary.labels == ("negative", "positive")\n'
+        '    assert summary.majority == "negative"\n',
         encoding="utf-8",
     )
 
@@ -1018,7 +1027,9 @@ def _write_dummy_dataset_scaffold(repo_path: Path, repo_title: str) -> None:
 def _commit_scaffold(repo_path: Path) -> None:
     """Create an initial local commit for generated scaffolds."""
 
-    subprocess.run(["git", "add", "."], cwd=repo_path, check=True, capture_output=True, text=True)
+    subprocess.run(
+        ["git", "add", "."], cwd=repo_path, check=True, capture_output=True, text=True
+    )
     subprocess.run(
         [
             "git",
@@ -1069,7 +1080,9 @@ def prepare_reproduction_repository(
     REPRODUCTION_REPOS_DIR.mkdir(parents=True, exist_ok=True)
     repo_path = REPRODUCTION_REPOS_DIR / _safe_repo_name(repo_name)
     if repo_path.exists() and any(repo_path.iterdir()):
-        raise FileExistsError(f"Repository path already exists and is not empty: {repo_path}")
+        raise FileExistsError(
+            f"Repository path already exists and is not empty: {repo_path}"
+        )
 
     code_url = code_url.strip()
     dataset_url = dataset_url.strip()
@@ -1086,7 +1099,9 @@ def prepare_reproduction_repository(
     else:
         repo_path.mkdir(parents=True, exist_ok=True)
         _write_dummy_dataset_scaffold(repo_path, _safe_repo_name(repo_name))
-        subprocess.run(["git", "init"], cwd=repo_path, check=True, capture_output=True, text=True)
+        subprocess.run(
+            ["git", "init"], cwd=repo_path, check=True, capture_output=True, text=True
+        )
         _commit_scaffold(repo_path)
         actions.append(
             "Created a new clean-room scaffold repository with dummy data, baseline code, and tests."
@@ -1258,7 +1273,9 @@ def prepare_paper_coding_environment(
         encoding="utf-8",
     )
 
-    subprocess.run(["git", "init"], cwd=repo_path, check=True, capture_output=True, text=True)
+    subprocess.run(
+        ["git", "init"], cwd=repo_path, check=True, capture_output=True, text=True
+    )
     _commit_scaffold(repo_path)
 
     steps = [
@@ -1368,6 +1385,71 @@ async def run_paper_coding_agent(
     return f"{workspace_context}\n\n# Coding Agent Step-by-Step Plan\n\n{result.final_output}"
 
 
+def format_workspace_coding_request_prompt(
+    workspace_path: str,
+    file_tree: str,
+    user_request: str,
+    selected_path: str = "",
+    selected_content: str = "",
+) -> str:
+    """Build a prompt for continuing work inside an existing coding workspace."""
+
+    file_context = "No file is currently selected in the code console."
+    if selected_path.strip():
+        content = selected_content[-12_000:] if selected_content else ""
+        file_context = (
+            f"Selected file: {selected_path.strip()}\n"
+            "Current editor content, truncated to the latest 12,000 characters if needed:\n"
+            f"```text\n{content}\n```"
+        )
+
+    return f"""
+The user is working in an existing ResearchAgent code console and wants help modifying or improving saved code.
+Do not create a new workspace. Use the current workspace path and file list below.
+
+Workspace path:
+{workspace_path}
+
+Saved files and folders:
+{file_tree}
+
+{file_context}
+
+User request:
+{user_request.strip()}
+
+Return practical coding-agent help for this exact workspace:
+1. Recommended changes and why.
+2. Exact files to edit.
+3. Concrete replacement snippets or patch-style instructions when a selected file is relevant.
+4. Tests or commands to run after saving changes.
+5. Additional improvement suggestions, clearly separated from required changes.
+""".strip()
+
+
+async def advise_existing_coding_workspace(
+    workspace_path: str,
+    file_tree: str,
+    user_request: str,
+    selected_path: str = "",
+    selected_content: str = "",
+) -> str:
+    """Ask the paper coding agent for changes in an existing workspace."""
+
+    prompt = format_workspace_coding_request_prompt(
+        workspace_path, file_tree, user_request, selected_path, selected_content
+    )
+    try:
+        result = await Runner.run(build_paper_coding_agent(), prompt, max_turns=12)
+    except Exception as exc:
+        if _looks_like_missing_model_error(exc):
+            return _format_missing_coding_model_message(
+                f"# Coding Console\n\nExisting workspace: {workspace_path}", exc
+            )
+        raise
+    return f"# Coding Agent Workspace Suggestions\n\n{result.final_output}"
+
+
 async def _run_paper_reading_sequence(
     initial_request: str,
     selected_topic: str,
@@ -1378,9 +1460,12 @@ async def _run_paper_reading_sequence(
 ) -> tuple[str, str]:
     """Collect user input and run the paper-reading agent."""
 
-    paper_request = input_func(
-        "Which paper should I read? Enter a paper number/title, or press Enter to use your request: "
-    ).strip() or initial_request
+    paper_request = (
+        input_func(
+            "Which paper should I read? Enter a paper number/title, or press Enter to use your request: "
+        ).strip()
+        or initial_request
+    )
     paper_source = input_func(
         "Paste a PDF URL, paper URL, abstract, or text excerpt for grounding (Enter to use verified context only): "
     ).strip()
@@ -1403,9 +1488,12 @@ async def _run_artifact_scout_sequence(
 ) -> tuple[str, str]:
     """Collect user input and search for code and dataset artifacts."""
 
-    paper_request = input_func(
-        "Which paper should I find code/data for? Enter a paper number/title, or press Enter to use your request: "
-    ).strip() or initial_request
+    paper_request = (
+        input_func(
+            "Which paper should I find code/data for? Enter a paper number/title, or press Enter to use your request: "
+        ).strip()
+        or initial_request
+    )
 
     output_func("\n# Code and Dataset Scout\n")
     artifacts = await scout_code_and_datasets(
@@ -1426,9 +1514,12 @@ async def _run_reproduction_sequence(
 ) -> str:
     """Ask for approval at each repo-preparation step, then plan reproduction."""
 
-    paper_request = input_func(
-        "Which paper should the repo reproduce? Enter a paper number/title, or press Enter to use your request: "
-    ).strip() or initial_request
+    paper_request = (
+        input_func(
+            "Which paper should the repo reproduce? Enter a paper number/title, or press Enter to use your request: "
+        ).strip()
+        or initial_request
+    )
     code_url = input_func(
         "Existing code URL to clone (press Enter if no implementation is available): "
     ).strip()
@@ -1455,7 +1546,11 @@ async def _run_reproduction_sequence(
 
     summary = (
         f"Prepare repo '{repo_name}'"
-        + (f" by cloning {code_url}" if code_url else " as a new scaffold with dummy data/tests")
+        + (
+            f" by cloning {code_url}"
+            if code_url
+            else " as a new scaffold with dummy data/tests"
+        )
         + (f" with dataset notes from {dataset_url}" if dataset_url else "")
         + (f" and create GitHub repo {github_repo}" if github_repo else "")
     )
@@ -1510,9 +1605,7 @@ async def run_interactive_research_workflow(
     output_func(result.final_output)
 
     while True:
-        follow_up = input_func(
-            "\nAsk a follow-up, or press Enter to exit: "
-        ).strip()
+        follow_up = input_func("\nAsk a follow-up, or press Enter to exit: ").strip()
         if follow_up.lower() in EXIT_COMMANDS:
             break
 
