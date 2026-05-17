@@ -287,7 +287,7 @@ def build_home_page() -> str:
     }}
     function renderTranscript(chat) {{
       if (!chat || !chat.messages.length) return 'Your saved transcript and new agent output will appear here.';
-      return chat.messages.map(m => (m.role === 'user' ? 'You' : 'Agent') + ' [' + nowLabel(m.createdAt) + ']\n' + m.text).join('\n\n');
+      return chat.messages.map(m => (m.role === 'user' ? 'You' : 'Agent') + ' [' + nowLabel(m.createdAt) + ']\\n' + m.text).join('\\n\\n');
     }}
     function renderConversations() {{
       const list = $('conversationList');
@@ -310,10 +310,10 @@ def build_home_page() -> str:
       $('memoryState').textContent = 'Memory on · ' + prompts + ' prompt' + (prompts === 1 ? '' : 's');
     }}
     function setOutput(text) {{ output.textContent = text || 'No output returned.'; output.scrollTop = output.scrollHeight; }}
-    function appendOutput(label, text) {{ setOutput((output.textContent + '\n\n# ' + label + '\n\n' + text).trim()); }}
+    function appendOutput(label, text) {{ setOutput((output.textContent + '\\n\\n# ' + label + '\\n\\n' + text).trim()); }}
     function memoryContext() {{
       const chat = currentConversation();
-      return chat.messages.slice(-12).map(m => (m.role === 'user' ? 'User' : 'Agent') + ': ' + m.text).join('\n\n');
+      return chat.messages.slice(-12).map(m => (m.role === 'user' ? 'User' : 'Agent') + ': ' + m.text).join('\\n\\n');
     }}
     function remember(role, text) {{
       const chat = currentConversation();
@@ -349,7 +349,7 @@ def build_home_page() -> str:
       const topic = $('topic').value.trim();
       const context = $('context').value.trim() || state.lastReview || state.lastPaperContext || state.lastDiscovery;
       remember('user', prompt || 'Discover recent conference topics');
-      setOutput(renderTranscript(currentConversation()) + '\n\nAgent is thinking…');
+      setOutput(renderTranscript(currentConversation()) + '\\n\\nAgent is thinking…');
       $('busy').textContent = 'Agents are thinking…'; $('run').disabled = true;
       try {{
         if (state.mode === 'research') {{
@@ -358,7 +358,7 @@ def build_home_page() -> str:
           const data = await postJSON('/api/conference/discover', {{ prompt, memory: memoryContext() }}); state.lastDiscovery = data.output; const chat = currentConversation(); chat.lastDiscovery = data.output; $('context').value = data.output; remember('agent', data.output); setOutput(renderTranscript(currentConversation()));
         }} else if (state.mode === 'review') {{
           const data = await postJSON('/api/conference/review', {{ topic: topic || prompt, discovery_context: context, memory: memoryContext() }});
-          state.lastPaperContext = data.paper_context; state.lastReview = data.review; const chat = currentConversation(); chat.lastPaperContext = data.paper_context; chat.lastReview = data.review; $('context').value = data.paper_context + '\n\n' + data.review; remember('agent', data.paper_context + '\n\n' + data.review); setOutput(renderTranscript(currentConversation()));
+          state.lastPaperContext = data.paper_context; state.lastReview = data.review; const chat = currentConversation(); chat.lastPaperContext = data.paper_context; chat.lastReview = data.review; $('context').value = data.paper_context + '\\n\\n' + data.review; remember('agent', data.paper_context + '\\n\\n' + data.review); setOutput(renderTranscript(currentConversation()));
         }} else {{
           const data = await postJSON('/api/conference/follow-up', {{ question: prompt, selected_topic: topic, paper_context: state.lastPaperContext || context, review_context: state.lastReview || context, memory: memoryContext() }});
           remember('agent', data.output); appendOutput('Follow-up: ' + prompt, data.output);
