@@ -7,6 +7,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from research_agents.tools import search_verified_recent_papers_markdown
 from research_agents.workflow import (
+    build_handoff_tool_name,
     looks_like_follow_up_request,
     output_invites_follow_up,
     resolve_topic_selection,
@@ -34,6 +35,30 @@ DISCOVERY_CONTEXT_WITH_QUERY_MENU = '''
    6. **Cross-Modal Few-Shot Learning**
       *Query*: "Cross-modal few-shot learning WACV 2026 NeurIPS 2025"
 '''
+
+
+def test_handoff_tool_name_accepts_special_character_display_names() -> None:
+    assert build_handoff_tool_name("Critical Reviewer") == "transfer_to_critical_reviewer"
+    assert build_handoff_tool_name("R&D / Safety-Reviewer!") == "transfer_to_r_d_safety_reviewer"
+    assert build_handoff_tool_name("🔎⚠️") == "transfer_to_agent"
+    assert build_handoff_tool_name("2026 Reviewer") == "transfer_to_agent_2026_reviewer"
+
+
+def test_orchestrator_uses_safe_handoff_tool_names_without_changing_display_names() -> None:
+    from research_agents.workflow import build_research_orchestrator
+
+    orchestrator = build_research_orchestrator()
+
+    assert [handoff.agent_name for handoff in orchestrator.handoffs] == [
+        "Research Planner",
+        "Literature Scout",
+        "Critical Reviewer",
+    ]
+    assert [handoff.tool_name for handoff in orchestrator.handoffs] == [
+        "transfer_to_research_planner",
+        "transfer_to_literature_scout",
+        "transfer_to_critical_reviewer",
+    ]
 
 
 def test_numeric_selection_uses_adjacent_query_text() -> None:
