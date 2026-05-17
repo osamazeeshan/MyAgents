@@ -205,17 +205,18 @@ def build_home_page() -> str:
     }}
     textarea {{ min-height: 92px; max-height: 170px; resize: vertical; }}
     textarea:focus, input:focus {{ border-color: var(--accent); box-shadow: 0 0 0 4px rgba(124,247,212,.12); }}
-    .actions {{ display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 12px; }}
-    .primary, .secondary {{ border-radius: 16px; padding: 12px 16px; font-weight: 800; cursor: pointer; }}
-    .primary {{ border: 0; color: #06120f; background: linear-gradient(135deg, var(--accent), #e6ff8a); }}
+    .actions {{ display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; align-items: stretch; margin-top: 12px; }}
+    .primary, .secondary, .memory-pill {{ min-height: 42px; border-radius: 16px; padding: 10px 12px; font-size: 13px; line-height: 1.15; font-weight: 800; display: inline-flex; align-items: center; justify-content: center; text-align: center; white-space: nowrap; }}
+    .primary, .secondary {{ cursor: pointer; }}
+    .primary {{ border: 1px solid transparent; color: #06120f; background: linear-gradient(135deg, var(--accent), #e6ff8a); }}
     .secondary {{ color: var(--text); background: rgba(255,255,255,.09); border: 1px solid var(--border); }}
     .hint {{ color: var(--muted); font-size: 13px; }}
-    .memory-pill {{ color: var(--accent); border: 1px solid rgba(124,247,212,.4); border-radius: 999px; padding: 8px 11px; margin-left: auto; }}
+    .memory-pill {{ color: var(--accent); border: 1px solid rgba(124,247,212,.4); }}
     .agent-running {{
       display: none; align-items: center; gap: 8px; color: var(--accent); border: 1px solid rgba(124,247,212,.36);
       border-radius: 999px; padding: 7px 10px; background: rgba(124,247,212,.09); font-size: 13px; font-weight: 700;
     }}
-    .agent-running.visible {{ display: inline-flex; }}
+    .agent-running.visible {{ display: inline-flex; grid-column: 1 / -1; justify-content: center; }}
     .agent-running-logo {{
       width: 18px; height: 18px; border-radius: 6px; position: relative; overflow: hidden; flex: 0 0 auto;
       background: radial-gradient(circle at 35% 35%, var(--accent) 0 24%, transparent 25%), rgba(181,140,255,.18);
@@ -237,6 +238,7 @@ def build_home_page() -> str:
       .status {{ min-width: 0; }}
       .workspace {{ min-height: 720px; }}
       .modebar {{ grid-template-columns: repeat(2, minmax(0, 1fr)); }}
+      .actions {{ grid-template-columns: repeat(2, minmax(0, 1fr)); }}
     }}
     @media (max-width: 680px) {{ .status {{ grid-template-columns: 1fr; }} }}
   </style>
@@ -287,8 +289,8 @@ def build_home_page() -> str:
             <button class="primary" id="run">Run agents</button>
             <button class="secondary" id="clear">Clear input</button>
             <button class="secondary" id="restore">Restore latest</button>
-            <span class="agent-running" id="agentRunning" role="status" aria-live="polite" aria-hidden="true"><span class="agent-running-logo" aria-hidden="true"></span><span id="busy">Agents idle</span></span>
             <span class="memory-pill" id="memoryState">Memory on</span>
+            <span class="agent-running" id="agentRunning" role="status" aria-live="polite" aria-hidden="true"><span class="agent-running-logo" aria-hidden="true"></span><span id="busy">Agents idle</span></span>
           </div>
         </div>
       </section>
