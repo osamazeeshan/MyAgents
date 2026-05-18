@@ -269,7 +269,7 @@ def build_home_page() -> str:
     .workspace-picker {{ display: grid; gap: 8px; margin-bottom: 12px; }}
     .workspace-picker select {{ width: 100%; border: 1px solid var(--border); background: rgba(5,8,24,.86); color: var(--text); border-radius: 14px; padding: 10px 12px; outline: none; }}
     .coding-agent-panel {{ position: relative; }}
-    .coding-agent-panel textarea {{ min-height: 90px; max-height: 140px; padding-right: 140px; }}
+    .coding-agent-panel textarea {{ min-height: 90px; max-height: 140px; padding-right: 64px; font-size: 12px; }}
     .coding-agent-actions {{ position: absolute; right: 10px; bottom: 10px; }}
     .file-tree-panel {{ border-right: 1px solid var(--border); padding: 14px; min-height: 0; overflow: auto; background: rgba(3,6,20,.38); }}
     .file-tree-panel h3, .editor-panel h3 {{ margin: 0 0 10px; font-size: 12px; color: var(--accent); letter-spacing: .08em; text-transform: uppercase; }}
@@ -281,10 +281,12 @@ def build_home_page() -> str:
     .editor-meta {{ display: flex; justify-content: space-between; gap: 12px; color: var(--muted); font-size: 12px; }}
     .code-editor {{ min-height: 0; height: 100%; max-height: none; resize: none; border-radius: 16px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 13px; line-height: 1.5; tab-size: 2; }}
     .output-toolbar {{ display: flex; justify-content: space-between; align-items: center; gap: 8px; }}
-    .output-toolbar h3 {{ margin: 0; }}
+    .output-toolbar h3 {{ margin: 0; font-size: 12px; color: var(--accent); letter-spacing: .08em; text-transform: uppercase; }}
     .output-toggle {{ min-height: 32px; border-radius: 10px; padding: 6px 10px; font-size: 11px; font-weight: 700; color: var(--text); background: rgba(255,255,255,.09); border: 1px solid var(--border); cursor: pointer; }}
     .output-panel {{ border-left: 1px solid var(--border); min-height: 0; padding: 14px; display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 10px; }}
     .output-panel.hidden {{ display: none; }}
+    .output-resize-handle {{ width: 7px; cursor: col-resize; background: rgba(181,140,255,.35); border-radius: 10px; margin: 10px 0; }}
+    .ask-arrow {{ width: 34px; min-width: 34px; height: 34px; border-radius: 999px; padding: 0; font-size: 16px; font-weight: 900; line-height: 1; display: inline-flex; align-items: center; justify-content: center; }}
     .run-console {{ min-height: 0; overflow: auto; white-space: pre; border: 1px solid rgba(181,140,255,.28); border-radius: 16px; padding: 12px; background: rgba(0,0,0,.34); color: #efe8ff; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 12px; line-height: 1.45; resize: horizontal; min-width: 240px; }}
     details {{ margin-top: 16px; color: var(--muted); flex: 0 0 auto; }}
     pre {{ overflow: auto; background: rgba(0,0,0,.3); padding: 12px; border-radius: 12px; }}
@@ -394,7 +396,7 @@ def build_home_page() -> str:
         <button class="secondary" id="createPullRequest" type="button" disabled>Create PR</button>
         <button class="secondary" id="viewPullRequest" type="button" disabled>View PR</button>
         <button class="secondary" id="refreshTree" type="button">Refresh tree</button>
-        <button class="secondary" id="toggleOutput" type="button">Hide output</button>
+        <button class="secondary" id="toggleOutput" type="button">←</button>
         <button class="secondary" id="saveCode" type="button">Save code</button>
         <button class="primary" id="runDummy" type="button">Run dummy</button>
         <button class="secondary" id="closeCodeInterface" type="button">Close</button>
@@ -415,12 +417,13 @@ def build_home_page() -> str:
         <textarea class="code-editor" id="codeEditor" spellcheck="false" placeholder="Select a generated file from the tree. Changes are saved back to the local workspace."></textarea>
         <div class="editor-meta"><span>Dummy-data verification runs the generated scaffold against data/dummy_dataset.csv.</span><span id="saveState">Idle</span></div>
         <div class="coding-agent-panel">
-          <textarea id="codeAgentRequest" placeholder="Ask the coding agent for changes, refactors, tests, or improvement suggestions for this workspace or selected file."></textarea>
+          <textarea id="codeAgentRequest" placeholder="Ask for changes or fixes…"></textarea>
           <div class="coding-agent-actions">
-            <button class="secondary" id="askCodeAgent" type="button">Ask coding agent</button>
+            <button class="secondary ask-arrow" id="askCodeAgent" type="button" aria-label="Ask coding agent">↑</button>
           </div>
         </div>
       </section>
+      <div class="output-resize-handle" id="outputResizeHandle" role="separator" aria-orientation="vertical" aria-label="Resize output panel"></div>
       <aside class="output-panel" id="outputPanel">
         <div class="output-toolbar">
           <h3>Agent output</h3>
@@ -727,8 +730,22 @@ def build_home_page() -> str:
     $('toggleOutput').addEventListener('click', () => {{
       const panel = $('outputPanel');
       panel.classList.toggle('hidden');
-      $('toggleOutput').textContent = panel.classList.contains('hidden') ? 'Show output' : 'Hide output';
+      $('outputResizeHandle').style.display = panel.classList.contains('hidden') ? 'none' : 'block';
+      $('toggleOutput').textContent = panel.classList.contains('hidden') ? '→' : '←';
     }});
+    (function setupOutputResizer(){{
+      const handle = $('outputResizeHandle');
+      const body = $('codeInterface').querySelector('.code-interface-body');
+      let dragging = false;
+      handle.addEventListener('mousedown', (e) => {{ dragging = true; e.preventDefault(); }});
+      window.addEventListener('mousemove', (e) => {{
+        if (!dragging || $('outputPanel').classList.contains('hidden')) return;
+        const rect = body.getBoundingClientRect();
+        const rightWidth = Math.max(260, Math.min(rect.width - 520, rect.right - e.clientX));
+        body.style.gridTemplateColumns = `minmax(220px, 300px) minmax(0, 1fr) ${{rightWidth}}px`;
+      }});
+      window.addEventListener('mouseup', () => {{ dragging = false; }});
+    }})();
     $('publishGithub').addEventListener('click', () => publishWorkspaceToGithub().catch(err => {{ $('runConsole').textContent = 'Error: ' + err.message; }}));
     $('linkGithub').addEventListener('click', () => linkWorkspaceToGithub().catch(err => {{ $('runConsole').textContent = 'Error: ' + err.message; }}));
     $('createPullRequest').addEventListener('click', () => createWorkspacePullRequest().catch(err => {{ $('runConsole').textContent = 'Error: ' + err.message; }}));
