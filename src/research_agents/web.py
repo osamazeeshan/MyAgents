@@ -265,6 +265,7 @@ def build_home_page() -> str:
     .code-interface-header span {{ color: var(--muted); font-size: 11px; }}
     .code-interface-actions {{ display: grid; grid-auto-flow: column; grid-auto-columns: max-content; gap: 6px; justify-content: end; overflow-x: auto; white-space: nowrap; }}
     .code-interface-actions .primary, .code-interface-actions .secondary {{ width: auto; min-width: 0; min-height: 34px; flex: 0 0 auto; border-radius: 12px; padding: 7px 9px; font-size: 11px; line-height: 1.05; }}
+    #showOutputPanel {{ display: none; }}
     .code-interface-body {{ display: grid; grid-template-columns: minmax(220px, 300px) minmax(0, 1fr) 7px minmax(300px, 42%); min-height: 0; }}
     .workspace-picker {{ display: grid; gap: 8px; margin-bottom: 12px; }}
     .workspace-picker select {{ width: 100%; border: 1px solid var(--border); background: rgba(5,8,24,.86); color: var(--text); border-radius: 14px; padding: 10px 12px; outline: none; }}
@@ -280,10 +281,10 @@ def build_home_page() -> str:
     .editor-panel {{ display: grid; grid-template-rows: auto minmax(0, 1fr) auto auto; gap: 10px; min-height: 0; padding: 14px; }}
     .editor-meta {{ display: flex; justify-content: space-between; gap: 12px; color: var(--muted); font-size: 12px; }}
     .code-editor {{ min-height: 0; height: 100%; max-height: none; resize: none; border-radius: 16px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 13px; line-height: 1.5; tab-size: 2; }}
-    .output-toolbar {{ display: flex; justify-content: space-between; align-items: center; gap: 8px; }}
+    .output-toolbar {{ display: flex; justify-content: flex-start; align-items: center; gap: 8px; }}
     .output-toolbar h3 {{ margin: 0; font-size: 12px; color: var(--accent); letter-spacing: .08em; text-transform: uppercase; }}
     .output-toggle {{ width: 24px; min-width: 24px; height: 24px; min-height: 24px; border-radius: 999px; padding: 0; font-size: 12px; font-weight: 800; color: var(--text); background: rgba(255,255,255,.09); border: 1px solid var(--border); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }}
-    .output-panel {{ border-left: 1px solid var(--border); min-height: 0; padding: 14px; display: grid; grid-template-rows: auto auto minmax(0, 1fr); gap: 8px; }}
+    .output-panel {{ border-left: 1px solid var(--border); min-height: 0; padding: 14px; display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 8px; }}
     .output-panel.hidden {{ display: none; }}
     .output-resize-handle {{ width: 7px; cursor: col-resize; background: rgba(181,140,255,.35); border-radius: 10px; margin: 10px 0; align-self: stretch; }}
     .ask-arrow {{ width: 34px; min-width: 34px; height: 34px; border-radius: 999px; padding: 0; font-size: 16px; font-weight: 900; line-height: 1; display: inline-flex; align-items: center; justify-content: center; }}
@@ -396,7 +397,7 @@ def build_home_page() -> str:
         <button class="secondary" id="createPullRequest" type="button" disabled>Create PR</button>
         <button class="secondary" id="viewPullRequest" type="button" disabled>View PR</button>
         <button class="secondary" id="refreshTree" type="button">Refresh tree</button>
-        <button class="secondary" id="toggleOutput" type="button">←</button>
+        <button class="secondary" id="showOutputPanel" type="button">→ Output</button>
         <button class="secondary" id="saveCode" type="button">Save code</button>
         <button class="primary" id="runDummy" type="button">Run dummy</button>
         <button class="secondary" id="closeCodeInterface" type="button">Close</button>
@@ -426,9 +427,9 @@ def build_home_page() -> str:
       <div class="output-resize-handle" id="outputResizeHandle" role="separator" aria-orientation="vertical" aria-label="Resize output panel"></div>
       <aside class="output-panel" id="outputPanel">
         <div class="output-toolbar">
+          <button class="secondary output-toggle" id="toggleOutput" type="button" aria-label="Hide output panel">←</button>
           <h3>Agent output</h3>
         </div>
-        <button class="secondary output-toggle" id="toggleOutput" type="button">←</button>
         <pre class="run-console" id="runConsole">Run output will appear here. Use the coding-agent box to request changes or improvement suggestions, then edit and save files in the code editor.</pre>
       </aside>
     </div>
@@ -733,6 +734,14 @@ def build_home_page() -> str:
       panel.classList.toggle('hidden');
       $('outputResizeHandle').style.display = panel.classList.contains('hidden') ? 'none' : 'block';
       $('toggleOutput').textContent = panel.classList.contains('hidden') ? '→' : '←';
+      $('showOutputPanel').style.display = panel.classList.contains('hidden') ? 'inline-flex' : 'none';
+    }});
+    $('showOutputPanel').addEventListener('click', () => {{
+      const panel = $('outputPanel');
+      panel.classList.remove('hidden');
+      $('outputResizeHandle').style.display = 'block';
+      $('toggleOutput').textContent = '←';
+      $('showOutputPanel').style.display = 'none';
     }});
     (function setupOutputResizer(){{
       const handle = $('outputResizeHandle');
