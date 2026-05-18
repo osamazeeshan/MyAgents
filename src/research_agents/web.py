@@ -255,8 +255,8 @@ def build_home_page() -> str:
     .coding-console {{ min-height: 92px; max-height: 210px; overflow: auto; border: 1px solid rgba(124,247,212,.24); border-radius: 16px; padding: 12px; background: rgba(0,0,0,.28); color: #dffdf5; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 12px; line-height: 1.45; white-space: pre-wrap; }}
     .coding-console .muted {{ color: var(--muted); }}
     .coding-model-note {{ color: var(--muted); font-size: 12px; line-height: 1.35; }}
-    .code-interface-button {{ display: none; width: auto; min-height: 40px; border-radius: 14px; padding: 10px 12px; font-weight: 800; color: #06120f; background: var(--accent); border: 0; cursor: pointer; }}
-    .code-interface-button.visible {{ display: inline-flex; align-items: center; justify-content: center; }}
+    .code-interface-button {{ width: auto; min-height: 40px; border-radius: 14px; padding: 10px 12px; font-weight: 800; color: #06120f; background: var(--accent); border: 0; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }}
+    .code-interface-button.secondary-style {{ color: var(--text); background: rgba(255,255,255,.09); border: 1px solid var(--border); }}
     .code-interface {{ position: fixed; inset: 14px; z-index: 20; display: none; grid-template-rows: auto 1fr; border: 1px solid var(--border); border-radius: 24px; background: rgba(7,8,23,.96); box-shadow: var(--shadow); overflow: hidden; backdrop-filter: blur(22px); }}
     .code-interface.visible {{ display: grid; }}
     .code-interface-header {{ display: grid; grid-template-columns: minmax(130px, auto) minmax(0, 1fr); align-items: center; gap: 10px; padding: 12px 14px; border-bottom: 1px solid var(--border); background: rgba(31,37,75,.72); }}
@@ -265,6 +265,11 @@ def build_home_page() -> str:
     .code-interface-actions {{ display: grid; grid-auto-flow: column; grid-auto-columns: max-content; gap: 6px; justify-content: end; overflow-x: auto; white-space: nowrap; }}
     .code-interface-actions .primary, .code-interface-actions .secondary {{ width: auto; min-width: 0; min-height: 34px; flex: 0 0 auto; border-radius: 12px; padding: 7px 9px; font-size: 11px; line-height: 1.05; }}
     .code-interface-body {{ display: grid; grid-template-columns: minmax(220px, 300px) minmax(0, 1fr); min-height: 0; }}
+    .workspace-picker {{ display: grid; gap: 8px; margin-bottom: 12px; }}
+    .workspace-picker select {{ width: 100%; border: 1px solid var(--border); background: rgba(5,8,24,.86); color: var(--text); border-radius: 14px; padding: 10px 12px; outline: none; }}
+    .coding-agent-panel {{ display: grid; gap: 8px; }}
+    .coding-agent-panel textarea {{ min-height: 70px; max-height: 120px; }}
+    .coding-agent-actions {{ display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }}
     .file-tree-panel {{ border-right: 1px solid var(--border); padding: 14px; min-height: 0; overflow: auto; background: rgba(3,6,20,.38); }}
     .file-tree-panel h3, .editor-panel h3 {{ margin: 0 0 10px; font-size: 12px; color: var(--accent); letter-spacing: .08em; text-transform: uppercase; }}
     .file-tree {{ display: grid; gap: 3px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 12px; }}
@@ -347,7 +352,7 @@ def build_home_page() -> str:
             <textarea id="ideaStream" placeholder="Optional: LLM idea prompts, variants to try, ablations, metrics, or links to explore."></textarea>
             <div class="coding-model-note">Recommended free local model for Mac M2 16GB: <b>coding · qwen2.5-coder:7b</b>. Install with <code>ollama pull qwen2.5-coder:7b</code>, then select it; coding mode will not force an unavailable model.</div>
             <div class="coding-console" id="codingConsole" aria-live="polite"><span class="muted">Coding console appears here when a coding request starts.</span></div>
-            <button class="code-interface-button" id="openCodeInterface" type="button">Open code interface</button>
+            <button class="code-interface-button" id="openCodeInterface" type="button">Open code console</button>
           </div>
           <div class="conference-fields" id="conferenceFields">
             <input id="topic" placeholder="Selected topic (required for review/follow-up)" />
@@ -358,6 +363,7 @@ def build_home_page() -> str:
             <button class="primary" id="run">Run agents</button>
             <button class="secondary" id="clear">Clear input</button>
             <button class="secondary" id="restore">Restore latest</button>
+            <button class="secondary" id="showCodeConsole" type="button">Show code console</button>
             <span class="memory-pill" id="memoryState">Memory on</span>
             <span class="agent-running" id="agentRunning" role="status" aria-live="polite" aria-hidden="true"><span class="agent-running-logo" aria-hidden="true"></span><span id="busy">Agents idle</span></span>
           </div>
@@ -389,6 +395,11 @@ def build_home_page() -> str:
     </header>
     <div class="code-interface-body">
       <aside class="file-tree-panel">
+        <div class="workspace-picker">
+          <h3>Saved code workspaces</h3>
+          <select id="workspaceSelect" aria-label="Saved code workspaces"><option value="">No workspace loaded</option></select>
+          <button class="secondary" id="loadWorkspace" type="button">Load workspace</button>
+        </div>
         <h3>Files and folders</h3>
         <div class="file-tree" id="fileTree">Run the coding agent, then open this interface.</div>
       </aside>
@@ -396,7 +407,13 @@ def build_home_page() -> str:
         <div class="editor-meta"><h3>Code console</h3><span id="selectedFile">Select a file to edit.</span></div>
         <textarea class="code-editor" id="codeEditor" spellcheck="false" placeholder="Select a generated file from the tree. Changes are saved back to the local workspace."></textarea>
         <div class="editor-meta"><span>Dummy-data verification runs the generated scaffold against data/dummy_dataset.csv.</span><span id="saveState">Idle</span></div>
-        <pre class="run-console" id="runConsole">Run output will appear here. Use Publish GitHub to create and link a repo, then Create PR to bundle and push new changes for review.</pre>
+        <div class="coding-agent-panel">
+          <textarea id="codeAgentRequest" placeholder="Ask the coding agent for changes, refactors, tests, or improvement suggestions for this workspace or selected file."></textarea>
+          <div class="coding-agent-actions">
+            <button class="secondary" id="askCodeAgent" type="button">Ask coding agent</button>
+          </div>
+        </div>
+        <pre class="run-console" id="runConsole">Run output will appear here. Use the coding-agent box to request changes or improvement suggestions, then edit and save files in the code editor.</pre>
       </section>
     </div>
   </section>
@@ -513,6 +530,48 @@ def build_home_page() -> str:
       $('createPullRequest').disabled = !state.currentWorkspace || !state.githubRepoUrl;
       $('viewPullRequest').disabled = !state.pullRequestUrl;
     }}
+    async function refreshWorkspaceList() {{
+      const data = await postJSON('/api/coding/workspaces', {{}});
+      const select = $('workspaceSelect');
+      select.innerHTML = '';
+      if (!data.workspaces || !data.workspaces.length) {{
+        const option = document.createElement('option');
+        option.value = '';
+        option.textContent = 'No saved coding workspaces yet';
+        select.appendChild(option);
+        return;
+      }}
+      data.workspaces.forEach(workspace => {{
+        const option = document.createElement('option');
+        option.value = workspace.path;
+        option.textContent = workspace.name + ' · ' + workspace.updated;
+        select.appendChild(option);
+      }});
+      if (state.currentWorkspace) select.value = state.currentWorkspace;
+      if (!select.value && data.workspaces[0]) select.value = data.workspaces[0].path;
+    }}
+    async function loadSelectedWorkspace() {{
+      const selected = $('workspaceSelect').value;
+      if (!selected) {{ $('fileTree').textContent = 'No saved coding workspace selected.'; return; }}
+      state.currentWorkspace = selected;
+      state.selectedFile = '';
+      $('selectedFile').textContent = 'Select a file to edit.';
+      $('codeEditor').value = '';
+      updateCodeInterfaceButton();
+      await refreshWorkspaceTree();
+    }}
+    async function openCodeConsole() {{
+      setCodeInterfaceVisible(true);
+      try {{
+        await refreshWorkspaceList();
+        if (!state.currentWorkspace && $('workspaceSelect').value) state.currentWorkspace = $('workspaceSelect').value;
+        if (state.currentWorkspace) await refreshWorkspaceTree();
+        else $('fileTree').textContent = 'No saved coding workspaces yet. Run the Paper coding agent to create one.';
+        updateCodeInterfaceButton();
+      }} catch (err) {{
+        $('fileTree').textContent = 'Error: ' + err.message;
+      }}
+    }}
     function renderFileTree(nodes, depth = 0) {{
       const fragment = document.createDocumentFragment();
       (nodes || []).forEach(node => {{
@@ -556,6 +615,20 @@ def build_home_page() -> str:
       $('runConsole').textContent = 'Running dummy-data verification…';
       const data = await postJSON('/api/coding/run', {{ workspace: state.currentWorkspace }});
       $('runConsole').textContent = data.command + '\\n\\nExit code: ' + data.returncode + '\\n\\n' + (data.output || '(no output)');
+    }}
+    async function askCodingAgentForWorkspaceChanges() {{
+      if (!state.currentWorkspace) {{ $('runConsole').textContent = 'No generated workspace yet.'; return; }}
+      const request = $('codeAgentRequest').value.trim();
+      if (!request) {{ $('runConsole').textContent = 'Type a coding-agent request first.'; return; }}
+      $('runConsole').textContent = 'Coding agent is reviewing the workspace…';
+      const data = await postJSON('/api/coding/advise', {{
+        workspace: state.currentWorkspace,
+        path: state.selectedFile,
+        content: $('codeEditor').value,
+        request,
+        model: selectedModel()
+      }});
+      $('runConsole').textContent = data.output || 'No coding-agent output returned.';
     }}
     function defaultGithubRepoName() {{
       const workspace = state.currentWorkspace.split(/[\\/]/).filter(Boolean).pop() || 'paper-coding-workspace';
@@ -629,11 +702,14 @@ def build_home_page() -> str:
     $('deleteChat').addEventListener('click', () => {{ state.conversations = state.conversations.filter(c => c.id !== state.currentId); if (!state.conversations.length) state.conversations = [newConversation()]; state.currentId = state.conversations[0].id; saveConversations(); hydrateCurrent(); }});
     $('restore').addEventListener('click', hydrateCurrent);
     $('clear').addEventListener('click', () => {{ $('prompt').value = ''; $('topic').value = ''; $('paperIdentifier').value = ''; $('codingGoal').value = ''; $('ideaStream').value = ''; setCodingConsole('Coding console appears here when a coding request starts.'); }});
-    $('openCodeInterface').addEventListener('click', async () => {{ setCodeInterfaceVisible(true); try {{ await refreshWorkspaceTree(); }} catch (err) {{ $('fileTree').textContent = 'Error: ' + err.message; }} }});
+    $('openCodeInterface').addEventListener('click', openCodeConsole);
+    $('showCodeConsole').addEventListener('click', openCodeConsole);
+    $('loadWorkspace').addEventListener('click', () => loadSelectedWorkspace().catch(err => {{ $('fileTree').textContent = 'Error: ' + err.message; }}));
     $('closeCodeInterface').addEventListener('click', () => setCodeInterfaceVisible(false));
     $('refreshTree').addEventListener('click', () => refreshWorkspaceTree().catch(err => {{ $('fileTree').textContent = 'Error: ' + err.message; }}));
     $('saveCode').addEventListener('click', () => saveWorkspaceFile().catch(err => {{ $('saveState').textContent = 'Error: ' + err.message; }}));
     $('runDummy').addEventListener('click', () => runDummyWorkspace().catch(err => {{ $('runConsole').textContent = 'Error: ' + err.message; }}));
+    $('askCodeAgent').addEventListener('click', () => askCodingAgentForWorkspaceChanges().catch(err => {{ $('runConsole').textContent = 'Error: ' + err.message; }}));
     $('publishGithub').addEventListener('click', () => publishWorkspaceToGithub().catch(err => {{ $('runConsole').textContent = 'Error: ' + err.message; }}));
     $('linkGithub').addEventListener('click', () => linkWorkspaceToGithub().catch(err => {{ $('runConsole').textContent = 'Error: ' + err.message; }}));
     $('createPullRequest').addEventListener('click', () => createWorkspacePullRequest().catch(err => {{ $('runConsole').textContent = 'Error: ' + err.message; }}));
@@ -784,6 +860,66 @@ def _resolve_workspace_file(workspace: str, relative_path: str) -> Path:
     ):
         raise ValueError("path is not editable from the coding interface")
     return candidate
+
+
+def _list_saved_coding_workspaces() -> dict[str, Any]:
+    """Return saved coding workspaces under reproduction_repos for the console."""
+
+    root = (Path.cwd() / "reproduction_repos").resolve()
+    if not root.is_dir():
+        return {"root": str(root), "workspaces": []}
+
+    workspaces: list[dict[str, Any]] = []
+    for child in sorted(root.iterdir(), key=lambda p: p.stat().st_mtime, reverse=True):
+        if not child.is_dir() or child.name in IGNORED_CODING_TREE_NAMES:
+            continue
+        has_code = any(
+            (child / name).exists()
+            for name in ("CODING_AGENT.md", "src", "tests", "scripts")
+        )
+        if not has_code:
+            continue
+        stat = child.stat()
+        workspaces.append(
+            {
+                "name": child.name,
+                "path": str(child.resolve()),
+                "updated": time.strftime(
+                    "%Y-%m-%d %H:%M", time.localtime(stat.st_mtime)
+                ),
+            }
+        )
+    return {"root": str(root), "workspaces": workspaces}
+
+
+def _format_coding_tree_for_agent(nodes: list[dict[str, Any]], depth: int = 0) -> str:
+    """Return a compact text tree for the coding agent prompt."""
+
+    lines: list[str] = []
+    for node in nodes:
+        prefix = "  " * depth
+        suffix = "/" if node.get("type") == "directory" else ""
+        lines.append(f"{prefix}{node.get('name', '')}{suffix}")
+        children = node.get("children")
+        if isinstance(children, list):
+            lines.append(_format_coding_tree_for_agent(children, depth + 1))
+    return "\n".join(line for line in lines if line)
+
+
+def _selected_editor_context(
+    workspace: str, relative_path: str, editor_content: Any
+) -> tuple[str, str]:
+    """Return selected file path and editor content for coding-agent advice."""
+
+    if not relative_path.strip():
+        return "", ""
+    if not isinstance(editor_content, str):
+        raise ValueError("'content' must be a string")
+    path = _resolve_workspace_file(workspace, relative_path)
+    if not path.is_file():
+        raise ValueError("selected path is not a file")
+    root = _resolve_workspace(workspace)
+    return path.relative_to(root).as_posix(), editor_content
 
 
 def _build_coding_tree(root: Path) -> list[dict[str, Any]]:
@@ -1064,11 +1200,15 @@ def _push_workspace_pull_request_branch(root: Path, html_url: str) -> dict[str, 
     with tempfile.TemporaryDirectory(prefix="researchagent-publish-") as tmpdir:
         publish_root = Path(tmpdir)
         if _remote_has_branch(html_url, "main"):
-            _run_git(["clone", "--branch", "main", html_url, str(publish_root)], Path.cwd())
+            _run_git(
+                ["clone", "--branch", "main", html_url, str(publish_root)], Path.cwd()
+            )
         else:
             _run_git(["init", "--initial-branch", "main"], publish_root)
             _run_git(["config", "user.name", "ResearchAgent"], publish_root)
-            _run_git(["config", "user.email", "researchagent@example.com"], publish_root)
+            _run_git(
+                ["config", "user.email", "researchagent@example.com"], publish_root
+            )
             (publish_root / "README.md").write_text(
                 "# ResearchAgent coding workspace\n\n"
                 "Open a pull request branch to review generated code.\n",
@@ -1096,7 +1236,10 @@ def _push_workspace_pull_request_branch(root: Path, html_url: str) -> dict[str, 
                 "push_command": f"git push -u origin {branch}",
                 "no_changes": "true",
             }
-        _run_git(["commit", "-m", "Bundle ResearchAgent coding workspace changes"], publish_root)
+        _run_git(
+            ["commit", "-m", "Bundle ResearchAgent coding workspace changes"],
+            publish_root,
+        )
         _run_git(["push", "-u", "origin", branch], publish_root)
 
     compare_url = _github_compare_url(html_url, branch)
@@ -1237,7 +1380,6 @@ def _create_workspace_pull_request(workspace: str, repo_url: str) -> dict[str, A
     }
 
 
-
 async def handle_api_request(path: str, payload: dict[str, Any]) -> dict[str, Any]:
     """Route a JSON API request to the appropriate agent workflow."""
 
@@ -1310,6 +1452,9 @@ async def _handle_api_request(path: str, payload: dict[str, Any]) -> dict[str, A
             response["workspace"] = workspace
         return response
 
+    if path == "/api/coding/workspaces":
+        return _list_saved_coding_workspaces()
+
     if path == "/api/coding/files":
         workspace = _resolve_workspace(_require_text(payload, "workspace"))
         return {"workspace": str(workspace), "tree": _build_coding_tree(workspace)}
@@ -1325,6 +1470,25 @@ async def _handle_api_request(path: str, payload: dict[str, Any]) -> dict[str, A
             _require_text(payload, "path"),
             payload.get("content", ""),
         )
+
+    if path == "/api/coding/advise":
+        from .workflow import advise_existing_coding_workspace
+
+        workspace = _resolve_workspace(_require_text(payload, "workspace"))
+        tree = _format_coding_tree_for_agent(_build_coding_tree(workspace))
+        selected_path, selected_content = _selected_editor_context(
+            str(workspace), _optional_text(payload, "path"), payload.get("content", "")
+        )
+        return {
+            "workspace": str(workspace),
+            "output": await advise_existing_coding_workspace(
+                str(workspace),
+                tree,
+                _require_text(payload, "request"),
+                selected_path,
+                selected_content,
+            ),
+        }
 
     if path == "/api/coding/run":
         return _run_workspace_dummy_data(_require_text(payload, "workspace"))
