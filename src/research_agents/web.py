@@ -616,6 +616,7 @@ def build_home_page() -> str:
       state.selectedFile = data.path;
       $('selectedFile').textContent = data.path;
       $('codeEditor').value = data.content;
+      $('codeEditorMirror').value = data.content;
       $('saveState').textContent = 'Loaded';
       await refreshWorkspaceTree();
     }}
@@ -623,6 +624,7 @@ def build_home_page() -> str:
       if (!state.currentWorkspace || !state.selectedFile) {{ $('saveState').textContent = 'Select a file first'; return; }}
       $('saveState').textContent = 'Saving…';
       const data = await postJSON('/api/coding/save', {{ workspace: state.currentWorkspace, path: state.selectedFile, content: $('codeEditor').value }});
+      $('codeEditorMirror').value = $('codeEditor').value;
       $('saveState').textContent = data.saved ? 'Saved ' + new Date().toLocaleTimeString() : 'Not saved';
     }}
     async function runDummyWorkspace() {{
