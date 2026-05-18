@@ -431,7 +431,7 @@ def build_home_page() -> str:
         </div>
         <pre class="run-console" id="runConsole">Run output will appear here. Use the coding-agent box to request changes or improvement suggestions, then edit and save files in the code editor.</pre>
       </aside>
-      <button class="secondary output-toggle output-edge-toggle" id="toggleOutput" type="button" aria-label="Hide output panel">←</button>
+      <button class="secondary output-toggle output-edge-toggle" id="toggleOutput" type="button" aria-label="Hide output panel">→</button>
     </div>
   </section>
 
@@ -729,12 +729,19 @@ def build_home_page() -> str:
     $('saveCode').addEventListener('click', () => saveWorkspaceFile().catch(err => {{ $('saveState').textContent = 'Error: ' + err.message; }}));
     $('runDummy').addEventListener('click', () => runDummyWorkspace().catch(err => {{ $('runConsole').textContent = 'Error: ' + err.message; }}));
     $('askCodeAgent').addEventListener('click', () => askCodingAgentForWorkspaceChanges().catch(err => {{ $('runConsole').textContent = 'Error: ' + err.message; }}));
+    let outputPanelWidth = 'minmax(300px, 42%)';
     $('toggleOutput').addEventListener('click', () => {{
       const panel = $('outputPanel');
+      const body = $('codeInterface').querySelector('.code-interface-body');
       const willHide = !panel.classList.contains('hidden');
       panel.classList.toggle('hidden');
       $('outputResizeHandle').style.display = willHide ? 'none' : 'block';
-      $('toggleOutput').textContent = willHide ? '→' : '←';
+      if (willHide) {{
+        body.style.gridTemplateColumns = 'minmax(220px, 300px) minmax(0, 1fr)';
+      }} else {{
+        body.style.gridTemplateColumns = `minmax(220px, 300px) minmax(0, 1fr) 7px ${{outputPanelWidth}}`;
+      }}
+      $('toggleOutput').textContent = willHide ? '←' : '→';
       $('toggleOutput').setAttribute('aria-label', willHide ? 'Show output panel' : 'Hide output panel');
     }});
     (function setupOutputResizer(){{
@@ -746,7 +753,8 @@ def build_home_page() -> str:
         if (!dragging || $('outputPanel').classList.contains('hidden')) return;
         const rect = body.getBoundingClientRect();
         const rightWidth = Math.max(260, Math.min(rect.width - 520, rect.right - e.clientX));
-        body.style.gridTemplateColumns = `minmax(220px, 300px) minmax(0, 1fr) 7px ${{rightWidth}}px`;
+        outputPanelWidth = `${{rightWidth}}px`;
+        body.style.gridTemplateColumns = `minmax(220px, 300px) minmax(0, 1fr) 7px ${{outputPanelWidth}}`;
       }});
       window.addEventListener('mouseup', () => {{ dragging = false; }});
     }})();
