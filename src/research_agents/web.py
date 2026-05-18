@@ -213,8 +213,8 @@ def build_home_page() -> str:
     }}
     .output .empty {{ color: var(--muted); }}
     .composer {{ border: 1px solid var(--border); background: rgba(3, 6, 20, .52); border-radius: 22px; padding: 14px; }}
-    .modebar {{ display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 7px; margin-bottom: 12px; }}
-    .mode {{ border: 1px solid var(--border); border-radius: 999px; padding: 7px 8px; color: var(--muted); background: transparent; cursor: pointer; font-size: 12px; line-height: 1.15; white-space: nowrap; }}
+    .modebar {{ display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 12px; }}
+    .mode {{ flex: 1 1 140px; border: 1px solid var(--border); border-radius: 999px; padding: 7px 10px; color: var(--muted); background: transparent; cursor: pointer; font-size: 12px; line-height: 1.2; white-space: normal; text-align: center; }}
     .mode.active {{ color: #06120f; background: var(--accent); border-color: var(--accent); font-weight: 800; }}
     textarea, input {{
       width: 100%; border: 1px solid var(--border); background: rgba(5,8,24,.86); color: var(--text);

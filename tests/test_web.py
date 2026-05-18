@@ -44,11 +44,8 @@ def test_home_page_contains_persistent_memory_layout() -> None:
         ".workspace.card { background: transparent; border-color: transparent; box-shadow: none; backdrop-filter: none; padding: 0; }"
         in html
     )
-    assert (
-        ".modebar { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 7px; margin-bottom: 12px; }"
-        in html
-    )
-    assert "font-size: 12px; line-height: 1.15; white-space: nowrap;" in html
+    assert ".modebar { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 12px; }" in html
+    assert "font-size: 12px; line-height: 1.2; white-space: normal;" in html
     assert (
         ".actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: stretch; margin-top: 12px; }"
         in html
