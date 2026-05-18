@@ -265,28 +265,26 @@ def build_home_page() -> str:
     .code-interface-header span {{ color: var(--muted); font-size: 11px; }}
     .code-interface-actions {{ display: grid; grid-auto-flow: column; grid-auto-columns: max-content; gap: 6px; justify-content: end; overflow-x: auto; white-space: nowrap; }}
     .code-interface-actions .primary, .code-interface-actions .secondary {{ width: auto; min-width: 0; min-height: 34px; flex: 0 0 auto; border-radius: 12px; padding: 7px 9px; font-size: 11px; line-height: 1.05; }}
-    .code-interface-body {{ display: grid; grid-template-columns: minmax(220px, 300px) minmax(0, 1fr); min-height: 0; }}
+    .code-interface-body {{ display: grid; grid-template-columns: minmax(220px, 300px) minmax(0, 1fr) minmax(300px, 42%); min-height: 0; }}
     .workspace-picker {{ display: grid; gap: 8px; margin-bottom: 12px; }}
     .workspace-picker select {{ width: 100%; border: 1px solid var(--border); background: rgba(5,8,24,.86); color: var(--text); border-radius: 14px; padding: 10px 12px; outline: none; }}
-    .coding-agent-panel {{ display: grid; gap: 8px; }}
-    .coding-agent-panel textarea {{ min-height: 70px; max-height: 120px; }}
-    .coding-agent-actions {{ display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }}
+    .coding-agent-panel {{ position: relative; }}
+    .coding-agent-panel textarea {{ min-height: 90px; max-height: 140px; padding-right: 140px; }}
+    .coding-agent-actions {{ position: absolute; right: 10px; bottom: 10px; }}
     .file-tree-panel {{ border-right: 1px solid var(--border); padding: 14px; min-height: 0; overflow: auto; background: rgba(3,6,20,.38); }}
     .file-tree-panel h3, .editor-panel h3 {{ margin: 0 0 10px; font-size: 12px; color: var(--accent); letter-spacing: .08em; text-transform: uppercase; }}
     .file-tree {{ display: grid; gap: 3px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 12px; }}
     .tree-node {{ width: 100%; border: 0; border-radius: 10px; padding: 6px 8px; text-align: left; color: var(--text); background: transparent; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }}
     .tree-node:hover, .tree-node.active {{ background: rgba(124,247,212,.13); color: var(--accent); }}
     .tree-node.folder {{ color: var(--muted); cursor: default; }}
-    .editor-panel {{ display: grid; grid-template-rows: auto minmax(0, 1fr) auto auto minmax(0, 1fr); gap: 10px; min-height: 0; padding: 14px; }}
+    .editor-panel {{ display: grid; grid-template-rows: auto minmax(0, 1fr) auto auto; gap: 10px; min-height: 0; padding: 14px; }}
     .editor-meta {{ display: flex; justify-content: space-between; gap: 12px; color: var(--muted); font-size: 12px; }}
     .code-editor {{ min-height: 0; height: 100%; max-height: none; resize: none; border-radius: 16px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 13px; line-height: 1.5; tab-size: 2; }}
     .output-toolbar {{ display: flex; justify-content: space-between; align-items: center; gap: 8px; }}
     .output-toolbar h3 {{ margin: 0; }}
     .output-toggle {{ min-height: 32px; border-radius: 10px; padding: 6px 10px; font-size: 11px; font-weight: 700; color: var(--text); background: rgba(255,255,255,.09); border: 1px solid var(--border); cursor: pointer; }}
-    .output-split {{ display: grid; grid-template-columns: minmax(260px, 1fr) 8px minmax(240px, 1fr); min-height: 180px; height: 100%; }}
-    .output-split.output-hidden {{ grid-template-columns: minmax(0, 1fr); }}
-    .splitter {{ background: rgba(181,140,255,.35); border-radius: 10px; cursor: col-resize; }}
-    .output-split.output-hidden .splitter, .output-split.output-hidden .run-console {{ display: none; }}
+    .output-panel {{ border-left: 1px solid var(--border); min-height: 0; padding: 14px; display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 10px; }}
+    .output-panel.hidden {{ display: none; }}
     .run-console {{ min-height: 0; overflow: auto; white-space: pre; border: 1px solid rgba(181,140,255,.28); border-radius: 16px; padding: 12px; background: rgba(0,0,0,.34); color: #efe8ff; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 12px; line-height: 1.45; resize: horizontal; min-width: 240px; }}
     details {{ margin-top: 16px; color: var(--muted); flex: 0 0 auto; }}
     pre {{ overflow: auto; background: rgba(0,0,0,.3); padding: 12px; border-radius: 12px; }}
@@ -396,6 +394,7 @@ def build_home_page() -> str:
         <button class="secondary" id="createPullRequest" type="button" disabled>Create PR</button>
         <button class="secondary" id="viewPullRequest" type="button" disabled>View PR</button>
         <button class="secondary" id="refreshTree" type="button">Refresh tree</button>
+        <button class="secondary" id="toggleOutput" type="button">Hide output</button>
         <button class="secondary" id="saveCode" type="button">Save code</button>
         <button class="primary" id="runDummy" type="button">Run dummy</button>
         <button class="secondary" id="closeCodeInterface" type="button">Close</button>
@@ -421,16 +420,13 @@ def build_home_page() -> str:
             <button class="secondary" id="askCodeAgent" type="button">Ask coding agent</button>
           </div>
         </div>
+      </section>
+      <aside class="output-panel" id="outputPanel">
         <div class="output-toolbar">
           <h3>Agent output</h3>
-          <button class="output-toggle" id="toggleOutput" type="button">Hide output</button>
         </div>
-        <div class="output-split" id="outputSplit">
-          <textarea class="code-editor" id="codeEditorMirror" spellcheck="false" readonly aria-label="Editor mirror"></textarea>
-          <div class="splitter" id="outputSplitter" role="separator" aria-orientation="vertical" aria-label="Resize output panel"></div>
-          <pre class="run-console" id="runConsole">Run output will appear here. Use the coding-agent box to request changes or improvement suggestions, then edit and save files in the code editor.</pre>
-        </div>
-      </section>
+        <pre class="run-console" id="runConsole">Run output will appear here. Use the coding-agent box to request changes or improvement suggestions, then edit and save files in the code editor.</pre>
+      </aside>
     </div>
   </section>
 
@@ -728,25 +724,11 @@ def build_home_page() -> str:
     $('saveCode').addEventListener('click', () => saveWorkspaceFile().catch(err => {{ $('saveState').textContent = 'Error: ' + err.message; }}));
     $('runDummy').addEventListener('click', () => runDummyWorkspace().catch(err => {{ $('runConsole').textContent = 'Error: ' + err.message; }}));
     $('askCodeAgent').addEventListener('click', () => askCodingAgentForWorkspaceChanges().catch(err => {{ $('runConsole').textContent = 'Error: ' + err.message; }}));
-    $('codeEditor').addEventListener('input', () => {{ $('codeEditorMirror').value = $('codeEditor').value; }});
     $('toggleOutput').addEventListener('click', () => {{
-      const panel = $('outputSplit');
-      panel.classList.toggle('output-hidden');
-      $('toggleOutput').textContent = panel.classList.contains('output-hidden') ? 'Show output' : 'Hide output';
+      const panel = $('outputPanel');
+      panel.classList.toggle('hidden');
+      $('toggleOutput').textContent = panel.classList.contains('hidden') ? 'Show output' : 'Hide output';
     }});
-    (function setupOutputSplitter(){{
-      const split = $('outputSplit');
-      const splitter = $('outputSplitter');
-      let dragging = false;
-      splitter.addEventListener('mousedown', (e) => {{ dragging = true; e.preventDefault(); }});
-      window.addEventListener('mousemove', (e) => {{
-        if (!dragging || split.classList.contains('output-hidden')) return;
-        const rect = split.getBoundingClientRect();
-        const left = Math.max(260, Math.min(rect.width - 260, e.clientX - rect.left));
-        split.style.gridTemplateColumns = `${{left}}px 8px minmax(240px, 1fr)`;
-      }});
-      window.addEventListener('mouseup', () => {{ dragging = false; }});
-    }})();
     $('publishGithub').addEventListener('click', () => publishWorkspaceToGithub().catch(err => {{ $('runConsole').textContent = 'Error: ' + err.message; }}));
     $('linkGithub').addEventListener('click', () => linkWorkspaceToGithub().catch(err => {{ $('runConsole').textContent = 'Error: ' + err.message; }}));
     $('createPullRequest').addEventListener('click', () => createWorkspacePullRequest().catch(err => {{ $('runConsole').textContent = 'Error: ' + err.message; }}));
