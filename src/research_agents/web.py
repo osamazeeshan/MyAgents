@@ -225,6 +225,7 @@ def build_home_page() -> str:
     .actions {{ display: flex; flex-wrap: wrap; gap: 8px; align-items: stretch; margin-top: 12px; }}
     .primary, .secondary, .memory-pill {{ min-height: 42px; border-radius: 16px; padding: 10px 12px; font-size: 13px; line-height: 1.15; font-weight: 800; display: inline-flex; align-items: center; justify-content: center; text-align: center; white-space: nowrap; }}
     .primary, .secondary {{ width: 112px; flex: 0 0 112px; cursor: pointer; }}
+    #showCodeConsole {{ width: auto; flex: 1 1 170px; min-width: 170px; }}
     .primary {{ border: 1px solid transparent; color: #06120f; background: linear-gradient(135deg, var(--accent), #e6ff8a); }}
     .secondary {{ color: var(--text); background: rgba(255,255,255,.09); border: 1px solid var(--border); }}
     .hint {{ color: var(--muted); font-size: 13px; }}
@@ -276,10 +277,17 @@ def build_home_page() -> str:
     .tree-node {{ width: 100%; border: 0; border-radius: 10px; padding: 6px 8px; text-align: left; color: var(--text); background: transparent; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }}
     .tree-node:hover, .tree-node.active {{ background: rgba(124,247,212,.13); color: var(--accent); }}
     .tree-node.folder {{ color: var(--muted); cursor: default; }}
-    .editor-panel {{ display: grid; grid-template-rows: auto minmax(0, 1fr) auto minmax(120px, 0.34fr); gap: 10px; min-height: 0; padding: 14px; }}
+    .editor-panel {{ display: grid; grid-template-rows: auto minmax(0, 1fr) auto auto minmax(0, 1fr); gap: 10px; min-height: 0; padding: 14px; }}
     .editor-meta {{ display: flex; justify-content: space-between; gap: 12px; color: var(--muted); font-size: 12px; }}
     .code-editor {{ min-height: 0; height: 100%; max-height: none; resize: none; border-radius: 16px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 13px; line-height: 1.5; tab-size: 2; }}
-    .run-console {{ min-height: 0; overflow: auto; white-space: pre-wrap; border: 1px solid rgba(181,140,255,.28); border-radius: 16px; padding: 12px; background: rgba(0,0,0,.34); color: #efe8ff; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 12px; line-height: 1.45; }}
+    .output-toolbar {{ display: flex; justify-content: space-between; align-items: center; gap: 8px; }}
+    .output-toolbar h3 {{ margin: 0; }}
+    .output-toggle {{ min-height: 32px; border-radius: 10px; padding: 6px 10px; font-size: 11px; font-weight: 700; color: var(--text); background: rgba(255,255,255,.09); border: 1px solid var(--border); cursor: pointer; }}
+    .output-split {{ display: grid; grid-template-columns: minmax(260px, 1fr) 8px minmax(240px, 1fr); min-height: 180px; height: 100%; }}
+    .output-split.output-hidden {{ grid-template-columns: minmax(0, 1fr); }}
+    .splitter {{ background: rgba(181,140,255,.35); border-radius: 10px; cursor: col-resize; }}
+    .output-split.output-hidden .splitter, .output-split.output-hidden .run-console {{ display: none; }}
+    .run-console {{ min-height: 0; overflow: auto; white-space: pre; border: 1px solid rgba(181,140,255,.28); border-radius: 16px; padding: 12px; background: rgba(0,0,0,.34); color: #efe8ff; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 12px; line-height: 1.45; resize: horizontal; min-width: 240px; }}
     details {{ margin-top: 16px; color: var(--muted); flex: 0 0 auto; }}
     pre {{ overflow: auto; background: rgba(0,0,0,.3); padding: 12px; border-radius: 12px; }}
     @media (max-width: 1180px) {{
@@ -413,7 +421,15 @@ def build_home_page() -> str:
             <button class="secondary" id="askCodeAgent" type="button">Ask coding agent</button>
           </div>
         </div>
-        <pre class="run-console" id="runConsole">Run output will appear here. Use the coding-agent box to request changes or improvement suggestions, then edit and save files in the code editor.</pre>
+        <div class="output-toolbar">
+          <h3>Agent output</h3>
+          <button class="output-toggle" id="toggleOutput" type="button">Hide output</button>
+        </div>
+        <div class="output-split" id="outputSplit">
+          <textarea class="code-editor" id="codeEditorMirror" spellcheck="false" readonly aria-label="Editor mirror"></textarea>
+          <div class="splitter" id="outputSplitter" role="separator" aria-orientation="vertical" aria-label="Resize output panel"></div>
+          <pre class="run-console" id="runConsole">Run output will appear here. Use the coding-agent box to request changes or improvement suggestions, then edit and save files in the code editor.</pre>
+        </div>
       </section>
     </div>
   </section>
@@ -601,6 +617,7 @@ def build_home_page() -> str:
       state.selectedFile = data.path;
       $('selectedFile').textContent = data.path;
       $('codeEditor').value = data.content;
+      $('codeEditorMirror').value = data.content;
       $('saveState').textContent = 'Loaded';
       await refreshWorkspaceTree();
     }}
@@ -608,6 +625,7 @@ def build_home_page() -> str:
       if (!state.currentWorkspace || !state.selectedFile) {{ $('saveState').textContent = 'Select a file first'; return; }}
       $('saveState').textContent = 'Saving…';
       const data = await postJSON('/api/coding/save', {{ workspace: state.currentWorkspace, path: state.selectedFile, content: $('codeEditor').value }});
+      $('codeEditorMirror').value = $('codeEditor').value;
       $('saveState').textContent = data.saved ? 'Saved ' + new Date().toLocaleTimeString() : 'Not saved';
     }}
     async function runDummyWorkspace() {{
@@ -710,6 +728,25 @@ def build_home_page() -> str:
     $('saveCode').addEventListener('click', () => saveWorkspaceFile().catch(err => {{ $('saveState').textContent = 'Error: ' + err.message; }}));
     $('runDummy').addEventListener('click', () => runDummyWorkspace().catch(err => {{ $('runConsole').textContent = 'Error: ' + err.message; }}));
     $('askCodeAgent').addEventListener('click', () => askCodingAgentForWorkspaceChanges().catch(err => {{ $('runConsole').textContent = 'Error: ' + err.message; }}));
+    $('codeEditor').addEventListener('input', () => {{ $('codeEditorMirror').value = $('codeEditor').value; }});
+    $('toggleOutput').addEventListener('click', () => {{
+      const panel = $('outputSplit');
+      panel.classList.toggle('output-hidden');
+      $('toggleOutput').textContent = panel.classList.contains('output-hidden') ? 'Show output' : 'Hide output';
+    }});
+    (function setupOutputSplitter(){{
+      const split = $('outputSplit');
+      const splitter = $('outputSplitter');
+      let dragging = false;
+      splitter.addEventListener('mousedown', (e) => {{ dragging = true; e.preventDefault(); }});
+      window.addEventListener('mousemove', (e) => {{
+        if (!dragging || split.classList.contains('output-hidden')) return;
+        const rect = split.getBoundingClientRect();
+        const left = Math.max(260, Math.min(rect.width - 260, e.clientX - rect.left));
+        split.style.gridTemplateColumns = `${{left}}px 8px minmax(240px, 1fr)`;
+      }});
+      window.addEventListener('mouseup', () => {{ dragging = false; }});
+    }})();
     $('publishGithub').addEventListener('click', () => publishWorkspaceToGithub().catch(err => {{ $('runConsole').textContent = 'Error: ' + err.message; }}));
     $('linkGithub').addEventListener('click', () => linkWorkspaceToGithub().catch(err => {{ $('runConsole').textContent = 'Error: ' + err.message; }}));
     $('createPullRequest').addEventListener('click', () => createWorkspacePullRequest().catch(err => {{ $('runConsole').textContent = 'Error: ' + err.message; }}));
@@ -1517,6 +1554,23 @@ async def _handle_api_request(path: str, payload: dict[str, Any]) -> dict[str, A
     raise KeyError(path)
 
 
+def _friendly_api_error(exc: Exception) -> str:
+    """Return a user-friendly API error message for common setup issues."""
+
+    from .workflow import looks_like_missing_credentials_error
+
+    if looks_like_missing_credentials_error(exc):
+        return (
+            "Missing model credentials. Configure one of: "
+            "OPENAI_API_KEY / RESEARCH_AGENTS_API_KEY for hosted models, "
+            "or switch to local mode by setting "
+            "RESEARCH_AGENTS_PROVIDER=ollama (or local) with "
+            "RESEARCH_AGENTS_BASE_URL=http://localhost:11434/v1 and "
+            "RESEARCH_AGENTS_API_KEY=ollama."
+        )
+    return str(exc)
+
+
 class ResearchAgentRequestHandler(BaseHTTPRequestHandler):
     """HTTP request handler for the ResearchAgent app."""
 
@@ -1576,12 +1630,12 @@ class ResearchAgentRequestHandler(BaseHTTPRequestHandler):
                 self, HTTPStatus.NOT_FOUND, {"error": f"Unknown path: {path}"}
             )
         except (json.JSONDecodeError, ValueError) as exc:
-            _json_response(self, HTTPStatus.BAD_REQUEST, {"error": str(exc)})
+            _json_response(self, HTTPStatus.BAD_REQUEST, {"error": _friendly_api_error(exc)})
         except (
             Exception
         ) as exc:  # pragma: no cover - preserves useful errors for the browser
             logging.getLogger(__name__).exception("Agent workflow failed")
-            _json_response(self, HTTPStatus.INTERNAL_SERVER_ERROR, {"error": str(exc)})
+            _json_response(self, HTTPStatus.INTERNAL_SERVER_ERROR, {"error": _friendly_api_error(exc)})
         else:
             _json_response(self, HTTPStatus.OK, result)
 
