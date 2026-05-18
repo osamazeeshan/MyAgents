@@ -132,9 +132,16 @@ def load_settings() -> ResearchAgentSettings:
     """Load settings from environment variables."""
 
     provider = os.getenv("RESEARCH_AGENTS_PROVIDER", "openai").strip().lower()
+    model_override = _MODEL_OVERRIDE.get()
     local_mode = provider in {"local", "ollama", "lmstudio", "llama.cpp", "llamacpp"}
+
+    # If the UI explicitly picked a local preset, honor it even when provider env
+    # remains the default "openai".
+    if model_override and model_override in LOCAL_MODEL_PRESETS:
+        local_mode = True
+
     model_from_env = os.getenv("RESEARCH_AGENTS_MODEL", ResearchAgentSettings.model)
-    model = resolve_model_name(_MODEL_OVERRIDE.get() or model_from_env)
+    model = resolve_model_name(model_override or model_from_env)
 
     if local_mode:
         return ResearchAgentSettings(
