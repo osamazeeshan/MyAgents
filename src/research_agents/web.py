@@ -259,10 +259,11 @@ def build_home_page() -> str:
     .code-interface-button.secondary-style {{ color: var(--text); background: rgba(255,255,255,.09); border: 1px solid var(--border); }}
     .code-interface {{ position: fixed; inset: 14px; z-index: 20; display: none; grid-template-rows: auto 1fr; border: 1px solid var(--border); border-radius: 24px; background: rgba(7,8,23,.96); box-shadow: var(--shadow); overflow: hidden; backdrop-filter: blur(22px); }}
     .code-interface.visible {{ display: grid; }}
-    .code-interface-header {{ display: grid; grid-template-columns: minmax(180px, auto) minmax(0, 1fr); align-items: center; gap: 14px; padding: 14px 16px; border-bottom: 1px solid var(--border); background: rgba(31,37,75,.72); }}
-    .code-interface-header h2 {{ margin: 0; font-size: 18px; letter-spacing: -.02em; }}
-    .code-interface-header span {{ color: var(--muted); font-size: 12px; }}
-    .code-interface-actions {{ display: grid; grid-auto-flow: column; grid-auto-columns: max-content; gap: 8px; justify-content: end; overflow-x: auto; white-space: nowrap; }}
+    .code-interface-header {{ display: grid; grid-template-columns: minmax(130px, auto) minmax(0, 1fr); align-items: center; gap: 10px; padding: 12px 14px; border-bottom: 1px solid var(--border); background: rgba(31,37,75,.72); }}
+    .code-interface-header h2 {{ margin: 0; font-size: 16px; letter-spacing: -.02em; }}
+    .code-interface-header span {{ color: var(--muted); font-size: 11px; }}
+    .code-interface-actions {{ display: grid; grid-auto-flow: column; grid-auto-columns: max-content; gap: 6px; justify-content: end; overflow-x: auto; white-space: nowrap; }}
+    .code-interface-actions .primary, .code-interface-actions .secondary {{ width: auto; min-width: 0; min-height: 34px; flex: 0 0 auto; border-radius: 12px; padding: 7px 9px; font-size: 11px; line-height: 1.05; }}
     .code-interface-body {{ display: grid; grid-template-columns: minmax(220px, 300px) minmax(0, 1fr); min-height: 0; }}
     .workspace-picker {{ display: grid; gap: 8px; margin-bottom: 12px; }}
     .workspace-picker select {{ width: 100%; border: 1px solid var(--border); background: rgba(5,8,24,.86); color: var(--text); border-radius: 14px; padding: 10px 12px; outline: none; }}
@@ -519,9 +520,13 @@ def build_home_page() -> str:
       $('codeInterface').classList.toggle('visible', isVisible);
       $('codeInterface').setAttribute('aria-hidden', isVisible ? 'false' : 'true');
     }}
+    function workspaceDisplayLabel() {{
+      if (!state.currentWorkspace) return 'No workspace loaded yet.';
+      return state.githubRepoUrl ? 'Workspace linked to GitHub' : 'Workspace ready';
+    }}
     function updateCodeInterfaceButton() {{
-      $('openCodeInterface').textContent = state.currentWorkspace ? 'Open code console' : 'Show code console';
-      $('workspacePath').textContent = state.githubRepoUrl ? state.currentWorkspace + ' · ' + state.githubRepoUrl : (state.currentWorkspace || 'No workspace loaded yet.');
+      $('openCodeInterface').classList.toggle('visible', Boolean(state.currentWorkspace));
+      $('workspacePath').textContent = workspaceDisplayLabel();
       $('createPullRequest').disabled = !state.currentWorkspace || !state.githubRepoUrl;
       $('viewPullRequest').disabled = !state.pullRequestUrl;
     }}

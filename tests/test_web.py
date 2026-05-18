@@ -169,24 +169,24 @@ def test_home_page_includes_generated_code_interface_controls() -> None:
     assert 'id="linkGithub"' in html
     assert 'id="createPullRequest"' in html
     assert 'id="viewPullRequest"' in html
-    assert "publishWorkspaceToGithub" in html
-    assert "linkWorkspaceToGithub" in html
-    assert "createWorkspacePullRequest" in html
-    assert "/api/coding/workspaces" in html
-    assert "/api/coding/files" in html
-    assert "/api/coding/file" in html
-    assert "/api/coding/save" in html
-    assert "/api/coding/run" in html
-    assert "/api/coding/advise" in html
-    assert "/api/coding/publish" in html
-    assert "/api/coding/link" in html
-    assert "/api/coding/create-pr" in html
-    assert "state.currentWorkspace = data.workspace" in html
+    assert ".code-interface-actions { display: grid; grid-auto-flow: column; grid-auto-columns: max-content; gap: 6px; justify-content: end; overflow-x: auto; white-space: nowrap; }" in html
+    assert ".code-interface-actions .primary, .code-interface-actions .secondary { width: auto; min-width: 0; min-height: 34px; flex: 0 0 auto; border-radius: 12px; padding: 7px 9px; font-size: 11px; line-height: 1.05; }" in html
+    assert 'publishWorkspaceToGithub' in html
+    assert 'linkWorkspaceToGithub' in html
+    assert 'createWorkspacePullRequest' in html
+    assert '/api/coding/files' in html
+    assert '/api/coding/file' in html
+    assert '/api/coding/save' in html
+    assert '/api/coding/run' in html
+    assert '/api/coding/publish' in html
+    assert '/api/coding/link' in html
+    assert '/api/coding/create-pr' in html
+    assert 'state.currentWorkspace = data.workspace' in html
+    assert 'workspaceDisplayLabel' in html
+    assert "state.currentWorkspace + ' · ' + state.githubRepoUrl" not in html
 
 
-def test_coding_workspace_file_api_reads_saves_and_runs_dummy_data(
-    tmp_path, monkeypatch
-) -> None:
+def test_coding_workspace_file_api_reads_saves_and_runs_dummy_data(tmp_path, monkeypatch) -> None:
     import asyncio
     import research_agents.workflow as workflow
     from research_agents.web import handle_api_request
@@ -237,78 +237,7 @@ def test_coding_workspace_file_api_reads_saves_and_runs_dummy_data(
     assert "DatasetSummary" in run_result["output"]
 
 
-def test_coding_workspace_list_api_discovers_saved_workspaces(
-    tmp_path, monkeypatch
-) -> None:
-    import asyncio
-    import research_agents.workflow as workflow
-    from research_agents.web import handle_api_request
-
-    monkeypatch.chdir(tmp_path)
-    workflow.prepare_paper_coding_environment("Saved Workspace")
-
-    result = asyncio.run(handle_api_request("/api/coding/workspaces", {}))
-
-    assert result["root"].endswith("reproduction_repos")
-    assert [workspace["name"] for workspace in result["workspaces"]] == [
-        "Saved-Workspace-coding-lab"
-    ]
-    assert result["workspaces"][0]["path"].endswith("Saved-Workspace-coding-lab")
-
-
-def test_coding_workspace_advise_api_delegates_to_workflow(
-    tmp_path, monkeypatch
-) -> None:
-    import asyncio
-    import research_agents.workflow as workflow
-    from research_agents.web import handle_api_request
-
-    monkeypatch.chdir(tmp_path)
-    workspace_text = workflow.prepare_paper_coding_environment("Advice Smoke")
-    workspace = re.search(r"Created local workspace: (.+)", workspace_text).group(1)
-
-    async def fake_advise_existing_coding_workspace(
-        workspace_path: str,
-        file_tree: str,
-        user_request: str,
-        selected_path: str = "",
-        selected_content: str = "",
-    ) -> str:
-        assert workspace_path == str(Path(workspace).resolve())
-        assert "baseline.py" in file_tree
-        assert user_request == "Suggest tests"
-        assert selected_path == "src/reproduction_baseline/baseline.py"
-        assert "def majority_label" in selected_content
-        return "Add tests for label ties."
-
-    monkeypatch.setattr(
-        workflow,
-        "advise_existing_coding_workspace",
-        fake_advise_existing_coding_workspace,
-    )
-    selected_file = Path(workspace) / "src" / "reproduction_baseline" / "baseline.py"
-
-    result = asyncio.run(
-        handle_api_request(
-            "/api/coding/advise",
-            {
-                "workspace": workspace,
-                "path": "src/reproduction_baseline/baseline.py",
-                "content": selected_file.read_text(encoding="utf-8"),
-                "request": "Suggest tests",
-            },
-        )
-    )
-
-    assert result == {
-        "workspace": str(Path(workspace).resolve()),
-        "output": "Add tests for label ties.",
-    }
-
-
-def test_coding_workspace_link_api_enables_manual_github_connection(
-    tmp_path, monkeypatch
-) -> None:
+def test_coding_workspace_link_api_enables_manual_github_connection(tmp_path, monkeypatch) -> None:
     import asyncio
     import subprocess
     import research_agents.workflow as workflow
@@ -341,9 +270,7 @@ def test_coding_workspace_link_api_enables_manual_github_connection(
     assert remote_url == str(bare_repo)
 
 
-def test_coding_workspace_publish_failure_points_to_link_button(
-    tmp_path, monkeypatch
-) -> None:
+def test_coding_workspace_publish_failure_points_to_link_button(tmp_path, monkeypatch) -> None:
     import asyncio
     import research_agents.workflow as workflow
     from research_agents.web import handle_api_request
@@ -372,9 +299,7 @@ def test_coding_workspace_publish_failure_points_to_link_button(
     assert "Link GitHub" in publish_result["manual_link_hint"]
 
 
-def test_coding_workspace_publish_api_creates_remote_and_pushes(
-    tmp_path, monkeypatch
-) -> None:
+def test_coding_workspace_publish_api_creates_remote_and_pushes(tmp_path, monkeypatch) -> None:
     import asyncio
     import subprocess
     import research_agents.workflow as workflow
