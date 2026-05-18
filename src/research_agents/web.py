@@ -397,6 +397,7 @@ def build_home_page() -> str:
         <button class="secondary" id="createPullRequest" type="button" disabled>Create PR</button>
         <button class="secondary" id="viewPullRequest" type="button" disabled>View PR</button>
         <button class="secondary" id="refreshTree" type="button">Refresh tree</button>
+        <button class="secondary" id="showOutputPanel" type="button">→ Output</button>
         <button class="secondary" id="saveCode" type="button">Save code</button>
         <button class="primary" id="runDummy" type="button">Run dummy</button>
         <button class="secondary" id="closeCodeInterface" type="button">Close</button>
@@ -617,6 +618,7 @@ def build_home_page() -> str:
       state.selectedFile = data.path;
       $('selectedFile').textContent = data.path;
       $('codeEditor').value = data.content;
+      $('codeEditorMirror').value = data.content;
       $('saveState').textContent = 'Loaded';
       await refreshWorkspaceTree();
     }}
@@ -624,6 +626,7 @@ def build_home_page() -> str:
       if (!state.currentWorkspace || !state.selectedFile) {{ $('saveState').textContent = 'Select a file first'; return; }}
       $('saveState').textContent = 'Saving…';
       const data = await postJSON('/api/coding/save', {{ workspace: state.currentWorkspace, path: state.selectedFile, content: $('codeEditor').value }});
+      $('codeEditorMirror').value = $('codeEditor').value;
       $('saveState').textContent = data.saved ? 'Saved ' + new Date().toLocaleTimeString() : 'Not saved';
     }}
     async function runDummyWorkspace() {{
