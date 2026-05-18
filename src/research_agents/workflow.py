@@ -1334,6 +1334,12 @@ Return:
 4. Data, training, evaluation, and smoke-test commands.
 5. Incremental coding checkpoints with one command per checkpoint.
 6. LLM idea loop with safe variants, ablations, and metrics.
+7. A project-specific implementation sketch (function/class names and signatures) tailored to this paper and goal.
+
+Important quality constraints:
+- Do not return generic boilerplate plans; tie every step to this paper ID/title and requested goal.
+- Name concrete modules and tests under `src/reproduction_baseline/` and `tests/` that differ by paper/task.
+- When assumptions are unclear, provide two explicit implementation options and how to validate each.
 """.strip()
 
 
@@ -1342,6 +1348,13 @@ def _looks_like_missing_model_error(exc: Exception) -> bool:
 
     message = str(exc).lower()
     return "model" in message and "not found" in message
+
+
+def looks_like_missing_credentials_error(exc: Exception) -> bool:
+    """Return True when provider credentials are missing for hosted models."""
+
+    message = str(exc).lower()
+    return "missing credentials" in message or "openai_api_key" in message or "api_key" in message and "missing" in message
 
 
 def _format_missing_coding_model_message(workspace_context: str, exc: Exception) -> str:
