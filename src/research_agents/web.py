@@ -286,6 +286,7 @@ def build_home_page() -> str:
     .output-panel {{ border-left: 1px solid var(--border); min-height: 0; padding: 14px; display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 8px; }}
     .output-panel.hidden {{ display: none; }}
     .output-resize-handle {{ width: 7px; cursor: col-resize; background: rgba(181,140,255,.35); border-radius: 10px; margin: 10px 0; align-self: stretch; }}
+    .output-edge-toggle {{ position: absolute; right: 10px; top: 50%; transform: translateY(-50%); z-index: 25; width: 24px; min-width: 24px; height: 24px; min-height: 24px; border-radius: 999px; padding: 0; display: inline-flex; align-items: center; justify-content: center; }}
     .ask-arrow {{ width: 34px; min-width: 34px; height: 34px; border-radius: 999px; padding: 0; font-size: 16px; font-weight: 900; line-height: 1; display: inline-flex; align-items: center; justify-content: center; }}
     .run-console {{ min-height: 0; width: 100%; overflow: auto; white-space: pre; border: 1px solid rgba(181,140,255,.28); border-radius: 16px; padding: 12px; background: rgba(0,0,0,.34); color: #efe8ff; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 12px; line-height: 1.45; }}
     details {{ margin-top: 16px; color: var(--muted); flex: 0 0 auto; }}
@@ -426,11 +427,11 @@ def build_home_page() -> str:
       <div class="output-resize-handle" id="outputResizeHandle" role="separator" aria-orientation="vertical" aria-label="Resize output panel"></div>
       <aside class="output-panel" id="outputPanel">
         <div class="output-toolbar">
-          <button class="secondary output-toggle" id="toggleOutput" type="button" aria-label="Hide output panel">←</button>
           <h3>Agent output</h3>
         </div>
         <pre class="run-console" id="runConsole">Run output will appear here. Use the coding-agent box to request changes or improvement suggestions, then edit and save files in the code editor.</pre>
       </aside>
+      <button class="secondary output-toggle output-edge-toggle" id="toggleOutput" type="button" aria-label="Hide output panel">←</button>
     </div>
   </section>
 
