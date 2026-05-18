@@ -225,6 +225,7 @@ def build_home_page() -> str:
     .actions {{ display: flex; flex-wrap: wrap; gap: 8px; align-items: stretch; margin-top: 12px; }}
     .primary, .secondary, .memory-pill {{ min-height: 42px; border-radius: 16px; padding: 10px 12px; font-size: 13px; line-height: 1.15; font-weight: 800; display: inline-flex; align-items: center; justify-content: center; text-align: center; white-space: nowrap; }}
     .primary, .secondary {{ width: 112px; flex: 0 0 112px; cursor: pointer; }}
+    #showCodeConsole {{ width: auto; flex: 1 1 170px; min-width: 170px; }}
     .primary {{ border: 1px solid transparent; color: #06120f; background: linear-gradient(135deg, var(--accent), #e6ff8a); }}
     .secondary {{ color: var(--text); background: rgba(255,255,255,.09); border: 1px solid var(--border); }}
     .hint {{ color: var(--muted); font-size: 13px; }}
@@ -1517,6 +1518,23 @@ async def _handle_api_request(path: str, payload: dict[str, Any]) -> dict[str, A
     raise KeyError(path)
 
 
+def _friendly_api_error(exc: Exception) -> str:
+    """Return a user-friendly API error message for common setup issues."""
+
+    from .workflow import looks_like_missing_credentials_error
+
+    if looks_like_missing_credentials_error(exc):
+        return (
+            "Missing model credentials. Configure one of: "
+            "OPENAI_API_KEY / RESEARCH_AGENTS_API_KEY for hosted models, "
+            "or switch to local mode by setting "
+            "RESEARCH_AGENTS_PROVIDER=ollama (or local) with "
+            "RESEARCH_AGENTS_BASE_URL=http://localhost:11434/v1 and "
+            "RESEARCH_AGENTS_API_KEY=ollama."
+        )
+    return str(exc)
+
+
 class ResearchAgentRequestHandler(BaseHTTPRequestHandler):
     """HTTP request handler for the ResearchAgent app."""
 
@@ -1576,12 +1594,12 @@ class ResearchAgentRequestHandler(BaseHTTPRequestHandler):
                 self, HTTPStatus.NOT_FOUND, {"error": f"Unknown path: {path}"}
             )
         except (json.JSONDecodeError, ValueError) as exc:
-            _json_response(self, HTTPStatus.BAD_REQUEST, {"error": str(exc)})
+            _json_response(self, HTTPStatus.BAD_REQUEST, {"error": _friendly_api_error(exc)})
         except (
             Exception
         ) as exc:  # pragma: no cover - preserves useful errors for the browser
             logging.getLogger(__name__).exception("Agent workflow failed")
-            _json_response(self, HTTPStatus.INTERNAL_SERVER_ERROR, {"error": str(exc)})
+            _json_response(self, HTTPStatus.INTERNAL_SERVER_ERROR, {"error": _friendly_api_error(exc)})
         else:
             _json_response(self, HTTPStatus.OK, result)
 
