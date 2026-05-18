@@ -225,6 +225,7 @@ def build_home_page() -> str:
     .actions {{ display: flex; flex-wrap: wrap; gap: 8px; align-items: stretch; margin-top: 12px; }}
     .primary, .secondary, .memory-pill {{ min-height: 42px; border-radius: 16px; padding: 10px 12px; font-size: 13px; line-height: 1.15; font-weight: 800; display: inline-flex; align-items: center; justify-content: center; text-align: center; white-space: nowrap; }}
     .primary, .secondary {{ width: 112px; flex: 0 0 112px; cursor: pointer; }}
+    #showCodeConsole {{ width: auto; flex: 1 1 170px; min-width: 170px; }}
     .primary {{ border: 1px solid transparent; color: #06120f; background: linear-gradient(135deg, var(--accent), #e6ff8a); }}
     .secondary {{ color: var(--text); background: rgba(255,255,255,.09); border: 1px solid var(--border); }}
     .hint {{ color: var(--muted); font-size: 13px; }}
@@ -264,22 +265,29 @@ def build_home_page() -> str:
     .code-interface-header span {{ color: var(--muted); font-size: 11px; }}
     .code-interface-actions {{ display: grid; grid-auto-flow: column; grid-auto-columns: max-content; gap: 6px; justify-content: end; overflow-x: auto; white-space: nowrap; }}
     .code-interface-actions .primary, .code-interface-actions .secondary {{ width: auto; min-width: 0; min-height: 34px; flex: 0 0 auto; border-radius: 12px; padding: 7px 9px; font-size: 11px; line-height: 1.05; }}
-    .code-interface-body {{ display: grid; grid-template-columns: minmax(220px, 300px) minmax(0, 1fr); min-height: 0; }}
+    .code-interface-body {{ display: grid; grid-template-columns: minmax(220px, 300px) minmax(0, 1fr) 7px minmax(300px, 42%); min-height: 0; }}
     .workspace-picker {{ display: grid; gap: 8px; margin-bottom: 12px; }}
     .workspace-picker select {{ width: 100%; border: 1px solid var(--border); background: rgba(5,8,24,.86); color: var(--text); border-radius: 14px; padding: 10px 12px; outline: none; }}
-    .coding-agent-panel {{ display: grid; gap: 8px; }}
-    .coding-agent-panel textarea {{ min-height: 70px; max-height: 120px; }}
-    .coding-agent-actions {{ display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }}
+    .coding-agent-panel {{ position: relative; }}
+    .coding-agent-panel textarea {{ min-height: 90px; max-height: 140px; padding-right: 64px; font-size: 12px; }}
+    .coding-agent-actions {{ position: absolute; right: 10px; bottom: 10px; }}
     .file-tree-panel {{ border-right: 1px solid var(--border); padding: 14px; min-height: 0; overflow: auto; background: rgba(3,6,20,.38); }}
     .file-tree-panel h3, .editor-panel h3 {{ margin: 0 0 10px; font-size: 12px; color: var(--accent); letter-spacing: .08em; text-transform: uppercase; }}
     .file-tree {{ display: grid; gap: 3px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 12px; }}
     .tree-node {{ width: 100%; border: 0; border-radius: 10px; padding: 6px 8px; text-align: left; color: var(--text); background: transparent; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }}
     .tree-node:hover, .tree-node.active {{ background: rgba(124,247,212,.13); color: var(--accent); }}
     .tree-node.folder {{ color: var(--muted); cursor: default; }}
-    .editor-panel {{ display: grid; grid-template-rows: auto minmax(0, 1fr) auto minmax(120px, 0.34fr); gap: 10px; min-height: 0; padding: 14px; }}
+    .editor-panel {{ display: grid; grid-template-rows: auto minmax(0, 1fr) auto auto; gap: 10px; min-height: 0; padding: 14px; }}
     .editor-meta {{ display: flex; justify-content: space-between; gap: 12px; color: var(--muted); font-size: 12px; }}
     .code-editor {{ min-height: 0; height: 100%; max-height: none; resize: none; border-radius: 16px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 13px; line-height: 1.5; tab-size: 2; }}
-    .run-console {{ min-height: 0; overflow: auto; white-space: pre-wrap; border: 1px solid rgba(181,140,255,.28); border-radius: 16px; padding: 12px; background: rgba(0,0,0,.34); color: #efe8ff; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 12px; line-height: 1.45; }}
+    .output-toolbar {{ display: flex; justify-content: flex-start; align-items: center; gap: 8px; }}
+    .output-toolbar h3 {{ margin: 0; font-size: 12px; color: var(--accent); letter-spacing: .08em; text-transform: uppercase; }}
+    .output-toggle {{ width: 24px; min-width: 24px; height: 24px; min-height: 24px; border-radius: 999px; padding: 0; font-size: 12px; font-weight: 800; color: var(--text); background: rgba(255,255,255,.09); border: 1px solid var(--border); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }}
+    .output-panel {{ border-left: 1px solid var(--border); min-height: 0; padding: 14px; display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 8px; }}
+    .output-panel.hidden {{ display: none; }}
+    .output-resize-handle {{ width: 7px; cursor: col-resize; background: rgba(181,140,255,.35); border-radius: 10px; margin: 10px 0; align-self: stretch; }}
+    .ask-arrow {{ width: 34px; min-width: 34px; height: 34px; border-radius: 999px; padding: 0; font-size: 16px; font-weight: 900; line-height: 1; display: inline-flex; align-items: center; justify-content: center; }}
+    .run-console {{ min-height: 0; width: 100%; overflow: auto; white-space: pre; border: 1px solid rgba(181,140,255,.28); border-radius: 16px; padding: 12px; background: rgba(0,0,0,.34); color: #efe8ff; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 12px; line-height: 1.45; }}
     details {{ margin-top: 16px; color: var(--muted); flex: 0 0 auto; }}
     pre {{ overflow: auto; background: rgba(0,0,0,.3); padding: 12px; border-radius: 12px; }}
     @media (max-width: 1180px) {{
@@ -408,13 +416,20 @@ def build_home_page() -> str:
         <textarea class="code-editor" id="codeEditor" spellcheck="false" placeholder="Select a generated file from the tree. Changes are saved back to the local workspace."></textarea>
         <div class="editor-meta"><span>Dummy-data verification runs the generated scaffold against data/dummy_dataset.csv.</span><span id="saveState">Idle</span></div>
         <div class="coding-agent-panel">
-          <textarea id="codeAgentRequest" placeholder="Ask the coding agent for changes, refactors, tests, or improvement suggestions for this workspace or selected file."></textarea>
+          <textarea id="codeAgentRequest" placeholder="Ask for changes or fixes…"></textarea>
           <div class="coding-agent-actions">
-            <button class="secondary" id="askCodeAgent" type="button">Ask coding agent</button>
+            <button class="secondary ask-arrow" id="askCodeAgent" type="button" aria-label="Ask coding agent">↑</button>
           </div>
         </div>
-        <pre class="run-console" id="runConsole">Run output will appear here. Use the coding-agent box to request changes or improvement suggestions, then edit and save files in the code editor.</pre>
       </section>
+      <div class="output-resize-handle" id="outputResizeHandle" role="separator" aria-orientation="vertical" aria-label="Resize output panel"></div>
+      <aside class="output-panel" id="outputPanel">
+        <div class="output-toolbar">
+          <button class="secondary output-toggle" id="toggleOutput" type="button" aria-label="Hide output panel">←</button>
+          <h3>Agent output</h3>
+        </div>
+        <pre class="run-console" id="runConsole">Run output will appear here. Use the coding-agent box to request changes or improvement suggestions, then edit and save files in the code editor.</pre>
+      </aside>
     </div>
   </section>
 
@@ -710,6 +725,27 @@ def build_home_page() -> str:
     $('saveCode').addEventListener('click', () => saveWorkspaceFile().catch(err => {{ $('saveState').textContent = 'Error: ' + err.message; }}));
     $('runDummy').addEventListener('click', () => runDummyWorkspace().catch(err => {{ $('runConsole').textContent = 'Error: ' + err.message; }}));
     $('askCodeAgent').addEventListener('click', () => askCodingAgentForWorkspaceChanges().catch(err => {{ $('runConsole').textContent = 'Error: ' + err.message; }}));
+    $('toggleOutput').addEventListener('click', () => {{
+      const panel = $('outputPanel');
+      const willHide = !panel.classList.contains('hidden');
+      panel.classList.toggle('hidden');
+      $('outputResizeHandle').style.display = willHide ? 'none' : 'block';
+      $('toggleOutput').textContent = willHide ? '→' : '←';
+      $('toggleOutput').setAttribute('aria-label', willHide ? 'Show output panel' : 'Hide output panel');
+    }});
+    (function setupOutputResizer(){{
+      const handle = $('outputResizeHandle');
+      const body = $('codeInterface').querySelector('.code-interface-body');
+      let dragging = false;
+      handle.addEventListener('mousedown', (e) => {{ dragging = true; e.preventDefault(); }});
+      window.addEventListener('mousemove', (e) => {{
+        if (!dragging || $('outputPanel').classList.contains('hidden')) return;
+        const rect = body.getBoundingClientRect();
+        const rightWidth = Math.max(260, Math.min(rect.width - 520, rect.right - e.clientX));
+        body.style.gridTemplateColumns = `minmax(220px, 300px) minmax(0, 1fr) 7px ${{rightWidth}}px`;
+      }});
+      window.addEventListener('mouseup', () => {{ dragging = false; }});
+    }})();
     $('publishGithub').addEventListener('click', () => publishWorkspaceToGithub().catch(err => {{ $('runConsole').textContent = 'Error: ' + err.message; }}));
     $('linkGithub').addEventListener('click', () => linkWorkspaceToGithub().catch(err => {{ $('runConsole').textContent = 'Error: ' + err.message; }}));
     $('createPullRequest').addEventListener('click', () => createWorkspacePullRequest().catch(err => {{ $('runConsole').textContent = 'Error: ' + err.message; }}));
@@ -1517,6 +1553,23 @@ async def _handle_api_request(path: str, payload: dict[str, Any]) -> dict[str, A
     raise KeyError(path)
 
 
+def _friendly_api_error(exc: Exception) -> str:
+    """Return a user-friendly API error message for common setup issues."""
+
+    from .workflow import looks_like_missing_credentials_error
+
+    if looks_like_missing_credentials_error(exc):
+        return (
+            "Missing model credentials. Configure one of: "
+            "OPENAI_API_KEY / RESEARCH_AGENTS_API_KEY for hosted models, "
+            "or switch to local mode by setting "
+            "RESEARCH_AGENTS_PROVIDER=ollama (or local) with "
+            "RESEARCH_AGENTS_BASE_URL=http://localhost:11434/v1 and "
+            "RESEARCH_AGENTS_API_KEY=ollama."
+        )
+    return str(exc)
+
+
 class ResearchAgentRequestHandler(BaseHTTPRequestHandler):
     """HTTP request handler for the ResearchAgent app."""
 
@@ -1576,12 +1629,12 @@ class ResearchAgentRequestHandler(BaseHTTPRequestHandler):
                 self, HTTPStatus.NOT_FOUND, {"error": f"Unknown path: {path}"}
             )
         except (json.JSONDecodeError, ValueError) as exc:
-            _json_response(self, HTTPStatus.BAD_REQUEST, {"error": str(exc)})
+            _json_response(self, HTTPStatus.BAD_REQUEST, {"error": _friendly_api_error(exc)})
         except (
             Exception
         ) as exc:  # pragma: no cover - preserves useful errors for the browser
             logging.getLogger(__name__).exception("Agent workflow failed")
-            _json_response(self, HTTPStatus.INTERNAL_SERVER_ERROR, {"error": str(exc)})
+            _json_response(self, HTTPStatus.INTERNAL_SERVER_ERROR, {"error": _friendly_api_error(exc)})
         else:
             _json_response(self, HTTPStatus.OK, result)
 
