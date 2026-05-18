@@ -265,7 +265,7 @@ def build_home_page() -> str:
     .code-interface-header span {{ color: var(--muted); font-size: 11px; }}
     .code-interface-actions {{ display: grid; grid-auto-flow: column; grid-auto-columns: max-content; gap: 6px; justify-content: end; overflow-x: auto; white-space: nowrap; }}
     .code-interface-actions .primary, .code-interface-actions .secondary {{ width: auto; min-width: 0; min-height: 34px; flex: 0 0 auto; border-radius: 12px; padding: 7px 9px; font-size: 11px; line-height: 1.05; }}
-    .code-interface-body {{ display: grid; grid-template-columns: minmax(220px, 300px) minmax(0, 1fr) minmax(300px, 42%); min-height: 0; }}
+    .code-interface-body {{ display: grid; grid-template-columns: minmax(220px, 300px) minmax(0, 1fr) 7px minmax(300px, 42%); min-height: 0; }}
     .workspace-picker {{ display: grid; gap: 8px; margin-bottom: 12px; }}
     .workspace-picker select {{ width: 100%; border: 1px solid var(--border); background: rgba(5,8,24,.86); color: var(--text); border-radius: 14px; padding: 10px 12px; outline: none; }}
     .coding-agent-panel {{ position: relative; }}
@@ -285,7 +285,7 @@ def build_home_page() -> str:
     .output-toggle {{ min-height: 32px; border-radius: 10px; padding: 6px 10px; font-size: 11px; font-weight: 700; color: var(--text); background: rgba(255,255,255,.09); border: 1px solid var(--border); cursor: pointer; }}
     .output-panel {{ border-left: 1px solid var(--border); min-height: 0; padding: 14px; display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 10px; }}
     .output-panel.hidden {{ display: none; }}
-    .output-resize-handle {{ width: 7px; cursor: col-resize; background: rgba(181,140,255,.35); border-radius: 10px; margin: 10px 0; }}
+    .output-resize-handle {{ width: 7px; cursor: col-resize; background: rgba(181,140,255,.35); border-radius: 10px; margin: 10px 0; align-self: stretch; }}
     .ask-arrow {{ width: 34px; min-width: 34px; height: 34px; border-radius: 999px; padding: 0; font-size: 16px; font-weight: 900; line-height: 1; display: inline-flex; align-items: center; justify-content: center; }}
     .run-console {{ min-height: 0; overflow: auto; white-space: pre; border: 1px solid rgba(181,140,255,.28); border-radius: 16px; padding: 12px; background: rgba(0,0,0,.34); color: #efe8ff; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 12px; line-height: 1.45; resize: horizontal; min-width: 240px; }}
     details {{ margin-top: 16px; color: var(--muted); flex: 0 0 auto; }}
@@ -428,6 +428,7 @@ def build_home_page() -> str:
         <div class="output-toolbar">
           <h3>Agent output</h3>
         </div>
+        <button class="secondary output-toggle" id="toggleOutput" type="button">←</button>
         <pre class="run-console" id="runConsole">Run output will appear here. Use the coding-agent box to request changes or improvement suggestions, then edit and save files in the code editor.</pre>
       </aside>
     </div>
@@ -742,7 +743,7 @@ def build_home_page() -> str:
         if (!dragging || $('outputPanel').classList.contains('hidden')) return;
         const rect = body.getBoundingClientRect();
         const rightWidth = Math.max(260, Math.min(rect.width - 520, rect.right - e.clientX));
-        body.style.gridTemplateColumns = `minmax(220px, 300px) minmax(0, 1fr) ${{rightWidth}}px`;
+        body.style.gridTemplateColumns = `minmax(220px, 300px) minmax(0, 1fr) 7px ${{rightWidth}}px`;
       }});
       window.addEventListener('mouseup', () => {{ dragging = false; }});
     }})();
