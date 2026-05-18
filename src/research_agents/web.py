@@ -532,6 +532,14 @@ def build_home_page() -> str:
       consoleBox.textContent = Array.isArray(lines) ? lines.join('\\n') : (lines || '');
       consoleBox.scrollTop = consoleBox.scrollHeight;
     }}
+    function appendRunConsole(block) {{
+      const box = $('runConsole');
+      const incoming = (block || '').trim();
+      if (!incoming) return;
+      const existing = box.textContent.trim();
+      box.textContent = existing ? (existing + '\\n\\n────────────────────\\n\\n' + incoming) : incoming;
+      box.scrollTop = box.scrollHeight;
+    }}
     function appendCodingConsole(line) {{ setCodingConsole(($('codingConsole').textContent + '\\n' + line).trim()); }}
     function setCodeInterfaceVisible(isVisible) {{
       $('codeInterface').classList.toggle('visible', isVisible);
@@ -639,7 +647,7 @@ def build_home_page() -> str:
       if (!state.currentWorkspace) {{ $('runConsole').textContent = 'No generated workspace yet.'; return; }}
       const request = $('codeAgentRequest').value.trim();
       if (!request) {{ $('runConsole').textContent = 'Type a coding-agent request first.'; return; }}
-      $('runConsole').textContent = 'Coding agent is reviewing the workspace…';
+      appendRunConsole('🟣 USER QUESTION\\n' + request + '\\n\\nCoding agent is reviewing the workspace…');
       const data = await postJSON('/api/coding/advise', {{
         workspace: state.currentWorkspace,
         path: state.selectedFile,
@@ -647,7 +655,8 @@ def build_home_page() -> str:
         request,
         model: selectedModel()
       }});
-      $('runConsole').textContent = data.output || 'No coding-agent output returned.';
+      appendRunConsole('🟢 CODING AGENT\\n' + (data.output || 'No coding-agent output returned.'));
+      $('codeAgentRequest').value = '';
     }}
     function defaultGithubRepoName() {{
       const workspace = state.currentWorkspace.split(/[\\/]/).filter(Boolean).pop() || 'paper-coding-workspace';
