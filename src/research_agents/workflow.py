@@ -1334,6 +1334,12 @@ Return:
 4. Data, training, evaluation, and smoke-test commands.
 5. Incremental coding checkpoints with one command per checkpoint.
 6. LLM idea loop with safe variants, ablations, and metrics.
+7. A project-specific implementation sketch (function/class names and signatures) tailored to this paper and goal.
+
+Important quality constraints:
+- Do not return generic boilerplate plans; tie every step to this paper ID/title and requested goal.
+- Name concrete modules and tests under `src/reproduction_baseline/` and `tests/` that differ by paper/task.
+- When assumptions are unclear, provide two explicit implementation options and how to validate each.
 """.strip()
 
 
@@ -1343,6 +1349,32 @@ def _looks_like_missing_model_error(exc: Exception) -> bool:
     message = str(exc).lower()
     return "model" in message and "not found" in message
 
+
+def looks_like_missing_credentials_error(exc: Exception) -> bool:
+    """Return True when provider credentials are missing for hosted models."""
+
+    message = str(exc).lower()
+    return "missing credentials" in message or "openai_api_key" in message or "api_key" in message and "missing" in message
+
+
+def _format_missing_credentials_message(workspace_context: str, exc: Exception) -> str:
+    """Return a non-crashing response when provider credentials are missing."""
+
+    return (
+        f"{workspace_context}\n\n"
+        "# Provider Credentials Required\n\n"
+        "The coding workspace is ready, but the selected hosted model provider "
+        "requires credentials before requests can run. The provider reported:\n\n"
+        f"```text\n{exc}\n```\n\n"
+        "Use one of these options, then rerun your coding request:\n\n"
+        "1. Hosted OpenAI-compatible mode: set `OPENAI_API_KEY` or "
+        "`RESEARCH_AGENTS_API_KEY`.\n"
+        "2. Free local mode (Ollama): set `RESEARCH_AGENTS_PROVIDER=ollama`, "
+        "`RESEARCH_AGENTS_BASE_URL=http://localhost:11434/v1`, and "
+        "`RESEARCH_AGENTS_API_KEY=ollama`.\n\n"
+        "Tip: the generated scaffold can still be edited in the code console while "
+        "you finish provider setup."
+    )
 
 def _format_missing_coding_model_message(workspace_context: str, exc: Exception) -> str:
     """Return a non-crashing coding response with setup instructions."""
@@ -1381,6 +1413,8 @@ async def run_paper_coding_agent(
     except Exception as exc:
         if _looks_like_missing_model_error(exc):
             return _format_missing_coding_model_message(workspace_context, exc)
+        if looks_like_missing_credentials_error(exc):
+            return _format_missing_credentials_message(workspace_context, exc)
         raise
     return f"{workspace_context}\n\n# Coding Agent Step-by-Step Plan\n\n{result.final_output}"
 
