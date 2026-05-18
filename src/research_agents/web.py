@@ -265,7 +265,6 @@ def build_home_page() -> str:
     .code-interface-header span {{ color: var(--muted); font-size: 11px; }}
     .code-interface-actions {{ display: grid; grid-auto-flow: column; grid-auto-columns: max-content; gap: 6px; justify-content: end; overflow-x: auto; white-space: nowrap; }}
     .code-interface-actions .primary, .code-interface-actions .secondary {{ width: auto; min-width: 0; min-height: 34px; flex: 0 0 auto; border-radius: 12px; padding: 7px 9px; font-size: 11px; line-height: 1.05; }}
-    #showOutputPanel {{ display: none; }}
     .code-interface-body {{ display: grid; grid-template-columns: minmax(220px, 300px) minmax(0, 1fr) 7px minmax(300px, 42%); min-height: 0; }}
     .workspace-picker {{ display: grid; gap: 8px; margin-bottom: 12px; }}
     .workspace-picker select {{ width: 100%; border: 1px solid var(--border); background: rgba(5,8,24,.86); color: var(--text); border-radius: 14px; padding: 10px 12px; outline: none; }}
@@ -731,17 +730,11 @@ def build_home_page() -> str:
     $('askCodeAgent').addEventListener('click', () => askCodingAgentForWorkspaceChanges().catch(err => {{ $('runConsole').textContent = 'Error: ' + err.message; }}));
     $('toggleOutput').addEventListener('click', () => {{
       const panel = $('outputPanel');
+      const willHide = !panel.classList.contains('hidden');
       panel.classList.toggle('hidden');
-      $('outputResizeHandle').style.display = panel.classList.contains('hidden') ? 'none' : 'block';
-      $('toggleOutput').textContent = panel.classList.contains('hidden') ? '→' : '←';
-      $('showOutputPanel').style.display = panel.classList.contains('hidden') ? 'inline-flex' : 'none';
-    }});
-    $('showOutputPanel').addEventListener('click', () => {{
-      const panel = $('outputPanel');
-      panel.classList.remove('hidden');
-      $('outputResizeHandle').style.display = 'block';
-      $('toggleOutput').textContent = '←';
-      $('showOutputPanel').style.display = 'none';
+      $('outputResizeHandle').style.display = willHide ? 'none' : 'block';
+      $('toggleOutput').textContent = willHide ? '→' : '←';
+      $('toggleOutput').setAttribute('aria-label', willHide ? 'Show output panel' : 'Hide output panel');
     }});
     (function setupOutputResizer(){{
       const handle = $('outputResizeHandle');
