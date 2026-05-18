@@ -282,12 +282,12 @@ def build_home_page() -> str:
     .code-editor {{ min-height: 0; height: 100%; max-height: none; resize: none; border-radius: 16px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 13px; line-height: 1.5; tab-size: 2; }}
     .output-toolbar {{ display: flex; justify-content: space-between; align-items: center; gap: 8px; }}
     .output-toolbar h3 {{ margin: 0; font-size: 12px; color: var(--accent); letter-spacing: .08em; text-transform: uppercase; }}
-    .output-toggle {{ min-height: 32px; border-radius: 10px; padding: 6px 10px; font-size: 11px; font-weight: 700; color: var(--text); background: rgba(255,255,255,.09); border: 1px solid var(--border); cursor: pointer; }}
-    .output-panel {{ border-left: 1px solid var(--border); min-height: 0; padding: 14px; display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 10px; }}
+    .output-toggle {{ width: 24px; min-width: 24px; height: 24px; min-height: 24px; border-radius: 999px; padding: 0; font-size: 12px; font-weight: 800; color: var(--text); background: rgba(255,255,255,.09); border: 1px solid var(--border); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }}
+    .output-panel {{ border-left: 1px solid var(--border); min-height: 0; padding: 14px; display: grid; grid-template-rows: auto auto minmax(0, 1fr); gap: 8px; }}
     .output-panel.hidden {{ display: none; }}
     .output-resize-handle {{ width: 7px; cursor: col-resize; background: rgba(181,140,255,.35); border-radius: 10px; margin: 10px 0; align-self: stretch; }}
     .ask-arrow {{ width: 34px; min-width: 34px; height: 34px; border-radius: 999px; padding: 0; font-size: 16px; font-weight: 900; line-height: 1; display: inline-flex; align-items: center; justify-content: center; }}
-    .run-console {{ min-height: 0; overflow: auto; white-space: pre; border: 1px solid rgba(181,140,255,.28); border-radius: 16px; padding: 12px; background: rgba(0,0,0,.34); color: #efe8ff; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 12px; line-height: 1.45; resize: horizontal; min-width: 240px; }}
+    .run-console {{ min-height: 0; width: 100%; overflow: auto; white-space: pre; border: 1px solid rgba(181,140,255,.28); border-radius: 16px; padding: 12px; background: rgba(0,0,0,.34); color: #efe8ff; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 12px; line-height: 1.45; }}
     details {{ margin-top: 16px; color: var(--muted); flex: 0 0 auto; }}
     pre {{ overflow: auto; background: rgba(0,0,0,.3); padding: 12px; border-radius: 12px; }}
     @media (max-width: 1180px) {{
