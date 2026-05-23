@@ -382,7 +382,6 @@ def build_home_page() -> str:
           <textarea id="prompt" placeholder="Ask a research question, describe a topic, or paste a follow-up…"></textarea>
           <div class="actions">
             <button class="primary" id="run">Run agents</button>
-            <button class="secondary" id="clear">Clear input</button>
             <button class="secondary" id="restore">Restore latest</button>
             <button class="secondary" id="showCodeConsole" type="button">Show code console</button>
             <span class="memory-pill" id="memoryState">Memory on</span>
@@ -800,7 +799,6 @@ def build_home_page() -> str:
     $('newChat').addEventListener('click', () => {{ const chat = newConversation(); state.conversations.unshift(chat); state.currentId = chat.id; saveConversations(); hydrateCurrent(); }});
     $('deleteChat').addEventListener('click', () => {{ state.conversations = state.conversations.filter(c => c.id !== state.currentId); if (!state.conversations.length) state.conversations = [newConversation()]; state.currentId = state.conversations[0].id; saveConversations(); hydrateCurrent(); }});
     $('restore').addEventListener('click', hydrateCurrent);
-    $('clear').addEventListener('click', () => {{ $('prompt').value = ''; $('topic').value = ''; $('paperIdentifier').value = ''; $('codingGoal').value = ''; $('ideaStream').value = ''; setCodingConsole('Coding console appears here when a coding request starts.'); }});
     $('openCodeInterface').addEventListener('click', openCodeConsole);
     $('showCodeConsole').addEventListener('click', openCodeConsole);
     $('loadWorkspace').addEventListener('click', () => loadSelectedWorkspace().catch(err => {{ $('fileTree').textContent = 'Error: ' + err.message; }}));
