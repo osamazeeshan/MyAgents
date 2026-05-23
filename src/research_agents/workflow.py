@@ -68,6 +68,9 @@ You are a research orchestrator. Route the user's request to the best specialist
 - critical reviewer for critique, validity checks, and limitations.
 If a request needs multiple skills, hand off to the most important first step and
 include instructions for what the user should ask next.
+When presenting tabular information, always return a valid Markdown table with a
+header row, separator row, and one row per item; do not output collapsed,
+single-line, or malformed table text.
 """
 
 TOPIC_SCOUT_INSTRUCTIONS = """
