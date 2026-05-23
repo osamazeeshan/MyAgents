@@ -307,6 +307,18 @@ def build_home_page() -> str:
     .msg-body ul, .msg-body ol {{ margin: 0 0 8px 22px; }}
     .msg-body code {{ font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; background: rgba(0,0,0,.28); padding: 1px 5px; border-radius: 6px; }}
     .msg-body pre {{ margin: 10px 0; white-space: pre-wrap; }}
+
+    .newchat-starters {{ display: grid; gap: 14px; }}
+    .starter-intro {{ color: var(--muted); font-size: 13px; margin: 0 0 4px; }}
+    .starter-card {{ border: 1px solid var(--border); border-radius: 20px; background: rgba(255,255,255,.05); padding: 18px; display: grid; gap: 10px; }}
+    .starter-icon {{ width: 42px; height: 42px; border-radius: 12px; display: inline-flex; align-items: center; justify-content: center; background: rgba(124,247,212,.14); color: var(--accent); font-size: 20px; }}
+    .starter-title {{ font-size: 19px; margin: 0; letter-spacing: -.02em; }}
+    .starter-subtitle {{ font-size: 14px; color: var(--muted); margin: 0; }}
+    .starter-description {{ font-size: 13px; margin: 0; line-height: 1.45; color: #d8e3ff; }}
+    .starter-cta {{ width: fit-content; border: 1px solid transparent; color: #06120f; background: linear-gradient(135deg, var(--accent), #e6ff8a); border-radius: 14px; padding: 10px 14px; font-size: 13px; font-weight: 800; cursor: pointer; }}
+    .starter-domain-row {{ display: none; gap: 8px; flex-wrap: wrap; margin-top: 2px; }}
+    .starter-domain-row.visible {{ display: flex; }}
+    .starter-domain {{ border: 1px solid var(--border); border-radius: 999px; background: rgba(255,255,255,.07); color: var(--text); padding: 7px 11px; font-size: 12px; cursor: pointer; }}
     @media (max-width: 1180px) {{
       body {{ overflow: auto; }}
       .shell {{ height: auto; min-height: 100vh; }}
@@ -355,7 +367,7 @@ def build_home_page() -> str:
         </aside>
       </aside>
       <section class="card workspace">
-        <div class="output" id="output"><span class="empty">Your saved transcript and new agent output will appear here.</span></div>
+        <div class="output" id="output"><span class="empty">Select a starter option or begin typing to launch an agent workflow.</span></div>
         <div class="composer">
           <div class="modebar" aria-label="Agent actions">
             <button class="mode active" data-mode="research">Ask the agent crew</button>
@@ -547,8 +559,16 @@ def build_home_page() -> str:
       }}
       return blocks.join('');
     }}
+    function renderNewChatOptions() {{
+      const domains = ['Machine Learning / AI','Computer Vision','Medical / Healthcare','Telecommunications','Cybersecurity','Robotics','NLP','Custom domain'];
+      const domainButtons = domains.map(d => '<button class="starter-domain" data-domain="' + escapeHtml(d) + '">' + escapeHtml(d) + '</button>').join('');
+      return '<section class="newchat-starters"><p class="starter-intro">Start a new research workflow.</p><article class="starter-card"><span class="starter-icon" aria-hidden="true">🔎</span><h3 class="starter-title">Find a Research Problem</h3><p class="starter-subtitle">Explore high-impact research areas from recent conferences, journals, and industry trends.</p><p class="starter-description">This launches a guided Research Agent flow to identify promising topic areas using reputable sources, trends, and open problems with citations.</p><button class="starter-cta" id="startResearchDiscovery" type="button">Start research discovery</button><div class="starter-domain-row" id="domainPicker" aria-label="Domain picker">' + domainButtons + '</div></article></section>';
+    }}
+    function legacyEmptyTranscript() {{
+      return '<span class="empty">Your saved transcript and new agent output will appear here.</span>';
+    }}
     function renderTranscript(chat) {{
-      if (!chat || !chat.messages.length) return '<span class="empty">Your saved transcript and new agent output will appear here.</span>';
+      if (!chat || !chat.messages.length) return renderNewChatOptions();
       const body = chat.messages.map(m => {{
         const role = m.role === 'user' ? 'You' : 'Agent';
         const klass = m.role === 'user' ? 'user' : 'agent';
@@ -808,6 +828,25 @@ def build_home_page() -> str:
     document.querySelectorAll('.mode').forEach(btn => btn.addEventListener('click', () => activateMode(btn.dataset.mode)));
     document.querySelectorAll('.suggestion').forEach(btn => btn.addEventListener('click', () => {{ activateMode(btn.dataset.mode); $('prompt').value = btn.dataset.prompt; if (btn.dataset.mode === 'coding') $('paperIdentifier').value = btn.dataset.prompt; $('prompt').focus(); }}));
     $('newChat').addEventListener('click', () => {{ const chat = newConversation(); state.conversations.unshift(chat); state.currentId = chat.id; saveConversations(); hydrateCurrent(); }});
+
+    output.addEventListener('click', (event) => {{
+      const startBtn = event.target.closest('#startResearchDiscovery');
+      if (startBtn) {{
+        const picker = $('domainPicker');
+        if (picker) picker.classList.toggle('visible');
+        activateMode('discover');
+        $('prompt').focus();
+        return;
+      }}
+      const domainBtn = event.target.closest('.starter-domain');
+      if (domainBtn) {{
+        const domain = domainBtn.dataset.domain;
+        activateMode('discover');
+        const customHint = domain === 'Custom domain' ? ' If custom, define specific application context and constraints.' : '';
+        $('prompt').value = ('Domain: ' + domain + '. Identify 5-10 promising high-impact research areas from recent reputable venues and industry needs. Prioritize domain-relevant top conferences and journals (for ML/CV: CVPR, ICCV, ECCV, NeurIPS, ICML, ICLR, ACL/EMNLP, IEEE TPAMI; for medical: Nature Medicine, The Lancet, JAMA, NEJM, IEEE JBHI, MICCAI; for telecom: IEEE Communications Magazine, IEEE TWC, ACM MobiCom, IEEE INFOCOM, 5G/6G roadmaps). For each area include: importance, recent evidence/signals, open problems, datasets, methods, difficulty, novelty potential, and recommended next step. Include source links and do not hallucinate sources.' + customHint).trim();
+        $('prompt').focus();
+      }}
+    }});
     $('deleteChat').addEventListener('click', () => {{ state.conversations = state.conversations.filter(c => c.id !== state.currentId); if (!state.conversations.length) state.conversations = [newConversation()]; state.currentId = state.conversations[0].id; saveConversations(); hydrateCurrent(); }});
     $('restore').addEventListener('click', hydrateCurrent);
     $('openCodeInterface').addEventListener('click', openCodeConsole);
