@@ -291,6 +291,22 @@ def build_home_page() -> str:
     .run-console {{ min-height: 0; width: 100%; overflow: auto; white-space: pre; border: 1px solid rgba(181,140,255,.28); border-radius: 16px; padding: 12px; background: rgba(0,0,0,.34); color: #efe8ff; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 12px; line-height: 1.45; }}
     details {{ margin-top: 16px; color: var(--muted); flex: 0 0 auto; }}
     pre {{ overflow: auto; background: rgba(0,0,0,.3); padding: 12px; border-radius: 12px; }}
+    .output .empty {{ color: var(--muted); }}
+    .transcript {{ display: grid; gap: 14px; }}
+    .msg {{ border: 1px solid var(--border); border-radius: 14px; padding: 12px 14px; background: rgba(255,255,255,.03); }}
+    .msg.user {{ border-color: rgba(113,236,255,.35); background: rgba(113,236,255,.08); }}
+    .msg.agent {{ border-color: rgba(181,140,255,.35); background: rgba(181,140,255,.08); }}
+    .msg-head {{ display: flex; justify-content: space-between; gap: 8px; margin-bottom: 8px; font-size: 12px; color: var(--muted); }}
+    .msg-role {{ font-weight: 700; color: var(--text); }}
+    .msg-body p {{ margin: 0 0 8px; }}
+    .msg-body p:last-child {{ margin-bottom: 0; }}
+    .msg-body h1, .msg-body h2, .msg-body h3 {{ margin: 0 0 8px; line-height: 1.25; }}
+    .msg-body h1 {{ font-size: 1.3rem; }}
+    .msg-body h2 {{ font-size: 1.15rem; }}
+    .msg-body h3 {{ font-size: 1.05rem; }}
+    .msg-body ul, .msg-body ol {{ margin: 0 0 8px 22px; }}
+    .msg-body code {{ font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; background: rgba(0,0,0,.28); padding: 1px 5px; border-radius: 6px; }}
+    .msg-body pre {{ margin: 10px 0; white-space: pre-wrap; }}
     @media (max-width: 1180px) {{
       body {{ overflow: auto; }}
       .shell {{ height: auto; min-height: 100vh; }}
@@ -471,9 +487,75 @@ def build_home_page() -> str:
       setOutput(renderTranscript(chat));
       updateMemorySummary();
     }}
+    function escapeHtml(text) {{
+      return (text || '')
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#39;');
+    }}
+    function inlineFormat(text) {{
+      let html = escapeHtml(text || '');
+      html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
+      html = html.replace(/\\*\\*([^*]+)\\*\\*/g, '<strong>$1</strong>');
+      html = html.replace(/\\*([^*]+)\\*/g, '<em>$1</em>');
+      return html;
+    }}
+    function markdownToHtml(text) {{
+      const lines = String(text || '').replace(/\\r/g, '').split('\\n');
+      const blocks = [];
+      let i = 0;
+      while (i < lines.length) {{
+        const line = lines[i];
+        if (!line.trim()) {{ i += 1; continue; }}
+        const heading = line.match(/^(#{1,3})\\s+(.+)/);
+        if (heading) {{
+          const level = heading[1].length;
+          blocks.push('<h' + level + '>' + inlineFormat(heading[2]) + '</h' + level + '>');
+          i += 1;
+          continue;
+        }}
+        if (line.startsWith('```')) {{
+          const code = [];
+          i += 1;
+          while (i < lines.length && !lines[i].startsWith('```')) {{ code.push(lines[i]); i += 1; }}
+          if (i < lines.length) i += 1;
+          blocks.push('<pre><code>' + escapeHtml(code.join('\\n')) + '</code></pre>');
+          continue;
+        }}
+        const ordered = line.match(/^(\\d+)\\.\\s+(.+)/);
+        const unordered = line.match(/^[-*]\\s+(.+)/);
+        if (ordered || unordered) {{
+          const isOrdered = Boolean(ordered);
+          const tag = isOrdered ? 'ol' : 'ul';
+          const items = [];
+          while (i < lines.length) {{
+            const m = isOrdered ? lines[i].match(/^(\\d+)\\.\\s+(.+)/) : lines[i].match(/^[-*]\\s+(.+)/);
+            if (!m) break;
+            items.push('<li>' + inlineFormat(m[2] || m[1]) + '</li>');
+            i += 1;
+          }}
+          blocks.push('<' + tag + '>' + items.join('') + '</' + tag + '>');
+          continue;
+        }}
+        const para = [];
+        while (i < lines.length && lines[i].trim() && !lines[i].startsWith('```') && !lines[i].match(/^(\\d+)\\.\\s+(.+)/) && !lines[i].match(/^[-*]\\s+(.+)/)) {{
+          para.push(lines[i]);
+          i += 1;
+        }}
+        blocks.push('<p>' + inlineFormat(para.join(' ')) + '</p>');
+      }}
+      return blocks.join('');
+    }}
     function renderTranscript(chat) {{
-      if (!chat || !chat.messages.length) return 'Your saved transcript and new agent output will appear here.';
-      return chat.messages.map(m => (m.role === 'user' ? 'You' : 'Agent') + ' [' + nowLabel(m.createdAt) + ']\\n' + m.text).join('\\n\\n');
+      if (!chat || !chat.messages.length) return '<span class="empty">Your saved transcript and new agent output will appear here.</span>';
+      const body = chat.messages.map(m => {{
+        const role = m.role === 'user' ? 'You' : 'Agent';
+        const klass = m.role === 'user' ? 'user' : 'agent';
+        return '<article class="msg ' + klass + '"><div class="msg-head"><span class="msg-role">' + role + '</span><span>' + nowLabel(m.createdAt) + '</span></div><div class="msg-body">' + markdownToHtml(m.text) + '</div></article>';
+      }}).join('');
+      return '<div class="transcript">' + body + '</div>';
     }}
     function renderConversations() {{
       const list = $('conversationList');
@@ -495,8 +577,8 @@ def build_home_page() -> str:
       $('memorySummary').setAttribute('aria-label', prompts + ' user prompt' + (prompts === 1 ? '' : 's') + ' saved in this chat. New requests include recent memory so the agent can continue where you left off.');
       $('memoryState').textContent = 'Memory on · ' + prompts + ' prompt' + (prompts === 1 ? '' : 's');
     }}
-    function setOutput(text) {{ output.textContent = text || 'No output returned.'; output.scrollTop = output.scrollHeight; }}
-    function appendOutput(label, text) {{ setOutput((output.textContent + '\\n\\n# ' + label + '\\n\\n' + text).trim()); }}
+    function setOutput(text) {{ output.innerHTML = text || '<span class="empty">No output returned.</span>'; output.scrollTop = output.scrollHeight; }}
+    function appendOutput(label, text) {{ setOutput(renderTranscript(currentConversation())); }}
     function setAgentRunning(isRunning) {{
       const indicator = $('agentRunning');
       indicator.classList.toggle('visible', isRunning);
