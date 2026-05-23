@@ -77,8 +77,9 @@ def test_home_page_contains_persistent_memory_layout() -> None:
 def test_home_page_script_escapes_newline_sequences_for_browser_parsing() -> None:
     html = build_home_page()
 
-    assert r"+ ']\n' + m.text" in html
-    assert r".join('\n\n')" in html
+    assert "function markdownToHtml(text)" in html
+    assert "function renderTranscript(chat)" in html
+    assert 'return \'<span class="empty">Your saved transcript and new agent output will appear here.</span>\'' in html
     assert r"+ '\n\nAgent is thinking…'" in html
     assert r"codingGoal ? '\n' + codingGoal" in html
     assert "looksLikeCodingRequest(prompt)" in html
