@@ -319,6 +319,10 @@ def build_home_page() -> str:
     .starter-domain-row {{ display: none; gap: 8px; flex-wrap: wrap; margin-top: 2px; }}
     .starter-domain-row.visible {{ display: flex; }}
     .starter-domain {{ border: 1px solid var(--border); border-radius: 999px; background: rgba(255,255,255,.07); color: var(--text); padding: 7px 11px; font-size: 12px; cursor: pointer; }}
+    .topic-picker {{ margin-top: 12px; border: 1px solid var(--border); border-radius: 16px; padding: 12px; background: rgba(124,247,212,.05); }}
+    .topic-picker-title {{ font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; margin-bottom: 8px; }}
+    .topic-options {{ display: flex; flex-wrap: wrap; gap: 8px; }}
+    .topic-option {{ border: 1px solid var(--border); border-radius: 999px; background: rgba(255,255,255,.08); color: var(--text); padding: 8px 12px; font-size: 12px; cursor: pointer; }}
     @media (max-width: 1180px) {{
       body {{ overflow: auto; }}
       .shell {{ height: auto; min-height: 100vh; }}
@@ -567,6 +571,27 @@ def build_home_page() -> str:
     function legacyEmptyTranscript() {{
       return '<span class="empty">Your saved transcript and new agent output will appear here.</span>';
     }}
+    function extractTopicCandidates(text) {{
+      const lines = String(text || '').split('\\n');
+      const found = [];
+      for (const line of lines) {{
+        const m = line.match(/^\\s*(?:\\d+[\\.)]|[-*])\\s+(.{{8,140}})$/);
+        if (!m) continue;
+        const topic = m[1].replace(/[:.]\\s*$/, '').trim();
+        if (!topic) continue;
+        const lowered = topic.toLowerCase();
+        if (['why it is important','recent signals or evidence','possible open problems','recommended next step'].includes(lowered)) continue;
+        if (!found.includes(topic)) found.push(topic);
+        if (found.length >= 10) break;
+      }}
+      return found;
+    }}
+    function renderTopicPicker(chat) {{
+      const topics = extractTopicCandidates(chat?.lastDiscovery || '');
+      if (!topics.length) return '';
+      const options = topics.map(t => '<button class="topic-option" data-topic="' + escapeHtml(t) + '">' + escapeHtml(t) + '</button>').join('');
+      return '<section class="topic-picker"><div class="topic-picker-title">Select one area to continue to deep research brief</div><div class="topic-options">' + options + '</div></section>';
+    }}
     function renderTranscript(chat) {{
       if (!chat || !chat.messages.length) return renderNewChatOptions();
       const body = chat.messages.map(m => {{
@@ -574,7 +599,7 @@ def build_home_page() -> str:
         const klass = m.role === 'user' ? 'user' : 'agent';
         return '<article class="msg ' + klass + '"><div class="msg-head"><span class="msg-role">' + role + '</span><span>' + nowLabel(m.createdAt) + '</span></div><div class="msg-body">' + markdownToHtml(m.text) + '</div></article>';
       }}).join('');
-      return '<div class="transcript">' + body + '</div>';
+      return '<div class="transcript">' + body + renderTopicPicker(chat) + '</div>';
     }}
     function renderConversations() {{
       const list = $('conversationList');
@@ -844,7 +869,18 @@ def build_home_page() -> str:
         activateMode('discover');
         const customHint = domain === 'Custom domain' ? ' If custom, define specific application context and constraints.' : '';
         $('prompt').value = ('Domain: ' + domain + '. Identify 5-10 promising high-impact research areas from recent reputable venues and industry needs. Prioritize domain-relevant top conferences and journals (for ML/CV: CVPR, ICCV, ECCV, NeurIPS, ICML, ICLR, ACL/EMNLP, IEEE TPAMI; for medical: Nature Medicine, The Lancet, JAMA, NEJM, IEEE JBHI, MICCAI; for telecom: IEEE Communications Magazine, IEEE TWC, ACM MobiCom, IEEE INFOCOM, 5G/6G roadmaps). For each area include: importance, recent evidence/signals, open problems, datasets, methods, difficulty, novelty potential, and recommended next step. Include source links and do not hallucinate sources.' + customHint).trim();
-        $('prompt').focus();
+        $('run').click();
+        return;
+      }}
+      const topicBtn = event.target.closest('.topic-option');
+      if (topicBtn) {{
+        const selectedTopic = topicBtn.dataset.topic || '';
+        if (!selectedTopic) return;
+        activateMode('review');
+        $('topic').value = selectedTopic;
+        $('prompt').value = selectedTopic;
+        $('run').click();
+        return;
       }}
     }});
     $('deleteChat').addEventListener('click', () => {{ state.conversations = state.conversations.filter(c => c.id !== state.currentId); if (!state.conversations.length) state.conversations = [newConversation()]; state.currentId = state.conversations[0].id; saveConversations(); hydrateCurrent(); }});
