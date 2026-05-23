@@ -1280,15 +1280,20 @@ def prepare_paper_coding_environment(
 
     steps = [
         "# Coding Console",
+        "## 1. Paper Identity & Verification",
         f"1. Created local workspace: {repo_path}",
-        "2. Created source, tests, data, scripts, experiments, notebooks, and artifacts folders.",
-        "3. Wrote scripts/bootstrap_env.sh to create a Python virtual environment and run smoke tests.",
-        "4. Added CODING_AGENT.md with the paper target, implementation goal, and LLM idea loop.",
-        f"5. Recommended free Mac M2 16GB coding model: {MAC_M2_CODING_MODEL_PRESET} ({preferred_model}).",
-        "6. Initialized git and committed the scaffold so future coding steps are reviewable.",
+        f"- Workspace created: `{repo_path}`",
+        "- Verification status: local scaffold initialized and ready for coding.",
         "",
-        "Next local command:",
-        f"bash {repo_path / 'scripts' / 'bootstrap_env.sh'}",
+        "## 2. Workspace Bootstrap Summary",
+        "- Created source, tests, data, scripts, experiments, notebooks, and artifacts folders.",
+        "- Wrote `scripts/bootstrap_env.sh` to create a Python virtual environment and run smoke tests.",
+        "- Added `CODING_AGENT.md` with the paper target, implementation goal, and LLM idea loop.",
+        f"- Recommended free Mac M2 16GB coding model: `{MAC_M2_CODING_MODEL_PRESET}` ({preferred_model}).",
+        "- Initialized git and committed the scaffold so future coding steps are reviewable.",
+        "",
+        "## 3. Next Local Command",
+        f"```bash\nbash {repo_path / 'scripts' / 'bootstrap_env.sh'}\n```",
     ]
     return "\n".join(steps)
 
@@ -1327,14 +1332,29 @@ Recommended free local model for Mac M2 16GB:
 Free tools / plugins policy:
 Use the prepared local workspace and free local tooling by default. Recommend repo-local plugins only when the user explicitly asks for them.
 
-Return:
-1. Paper identity and verification status.
-2. Implementation assumptions and missing inputs.
-3. Exact files and folders to edit next in the prepared workspace.
-4. Data, training, evaluation, and smoke-test commands.
-5. Incremental coding checkpoints with one command per checkpoint.
-6. LLM idea loop with safe variants, ablations, and metrics.
-7. A project-specific implementation sketch (function/class names and signatures) tailored to this paper and goal.
+Return using this exact heading structure:
+# Coding Console
+## 1. Paper Identity & Verification
+### Include:
+- Paper identity and verification status.
+## 2. Implementation assumptions & missing inputs
+### Include:
+- Assumptions and unknowns that block implementation.
+## 3. Files/folders to edit next
+### Include:
+- Exact files and folders to edit next in the prepared workspace.
+## 4. Commands (data/train/eval/smoke)
+### Include:
+- Data, training, evaluation, and smoke-test commands.
+## 5. Incremental coding checkpoints
+### Include:
+- One command per checkpoint.
+## 6. LLM idea loop
+### Include:
+- Safe variants, ablations, and metrics.
+## 7. Implementation sketch
+### Include:
+- Project-specific function/class names and signatures tailored to this paper and goal.
 
 Important quality constraints:
 - Do not return generic boilerplate plans; tie every step to this paper ID/title and requested goal.
