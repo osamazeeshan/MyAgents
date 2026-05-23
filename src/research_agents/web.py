@@ -300,6 +300,10 @@ def build_home_page() -> str:
     .msg-role {{ font-weight: 700; color: var(--text); }}
     .msg-body p {{ margin: 0 0 8px; }}
     .msg-body p:last-child {{ margin-bottom: 0; }}
+    .msg-body h1, .msg-body h2, .msg-body h3 {{ margin: 0 0 8px; line-height: 1.25; }}
+    .msg-body h1 {{ font-size: 1.3rem; }}
+    .msg-body h2 {{ font-size: 1.15rem; }}
+    .msg-body h3 {{ font-size: 1.05rem; }}
     .msg-body ul, .msg-body ol {{ margin: 0 0 8px 22px; }}
     .msg-body code {{ font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; background: rgba(0,0,0,.28); padding: 1px 5px; border-radius: 6px; }}
     .msg-body pre {{ margin: 10px 0; white-space: pre-wrap; }}
@@ -504,6 +508,13 @@ def build_home_page() -> str:
       while (i < lines.length) {{
         const line = lines[i];
         if (!line.trim()) {{ i += 1; continue; }}
+        const heading = line.match(/^(#{1,3})\\s+(.+)/);
+        if (heading) {{
+          const level = heading[1].length;
+          blocks.push('<h' + level + '>' + inlineFormat(heading[2]) + '</h' + level + '>');
+          i += 1;
+          continue;
+        }}
         if (line.startsWith('```')) {{
           const code = [];
           i += 1;
