@@ -7,6 +7,7 @@ import asyncio
 import sys
 
 from .config import format_local_model_presets
+from .local_setup import ensure_first_run_local_model
 
 
 PLAN_ONLY_TEXT = """Research-agent workflow preview:
@@ -74,6 +75,11 @@ def parse_args() -> argparse.Namespace:
         help="Open ResearchAgent in the default browser when using --web.",
     )
     parser.add_argument(
+        "--skip-local-setup",
+        action="store_true",
+        help="Skip first-run local system detection and Ollama model activation.",
+    )
+    parser.add_argument(
         "--conference-review",
         action="store_true",
         help=(
@@ -95,10 +101,20 @@ def main() -> None:
         print(format_local_model_presets())
         return
 
+    if not args.skip_local_setup and not args.plan_only:
+        setup = ensure_first_run_local_model(verbose=True)
+        if setup.activated or setup.attempted:
+            print(setup.message, file=sys.stderr)
+
     if args.web:
         from .web import run_server
 
-        run_server(args.web_host, args.web_port, open_browser=args.open_browser)
+        run_server(
+            args.web_host,
+            args.web_port,
+            open_browser=args.open_browser,
+            skip_local_setup=True,
+        )
         return
 
     if args.plan_only:
