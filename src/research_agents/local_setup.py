@@ -6,6 +6,10 @@ import os
 import platform
 import shutil
 import subprocess
+import time
+import urllib.error
+import urllib.request
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -17,7 +21,10 @@ from .config import (
 
 LOCAL_SETUP_SENTINEL = Path.home() / ".research_agents" / "local_model_setup"
 LOCAL_SETUP_ENV = "RESEARCH_AGENTS_AUTO_LOCAL_SETUP"
+OLLAMA_INSTALL_ENV = "RESEARCH_AGENTS_AUTO_INSTALL_OLLAMA"
 DEFAULT_SETUP_TIMEOUT_SECONDS = 60 * 30
+DEFAULT_OLLAMA_INSTALL_TIMEOUT_SECONDS = 60 * 10
+OLLAMA_HEALTH_URL = "http://localhost:11434/api/tags"
 
 
 @dataclass(frozen=True)
@@ -49,7 +56,7 @@ class LocalModelRecommendation:
 
 @dataclass(frozen=True)
 class LocalSetupResult:
-    """Outcome from the local first-run setup step."""
+    """Outcome from the local setup step."""
 
     spec: LocalSystemSpec
     recommendation: LocalModelRecommendation
@@ -75,7 +82,7 @@ def detect_system_spec() -> LocalSystemSpec:
 
 
 def _detect_memory_gb() -> float | None:
-    """Best-effort physical memory detection using the standard library."""
+    """Best-effort physical memory detection using local OS commands."""
 
     if hasattr(os, "sysconf"):
         try:
@@ -86,23 +93,58 @@ def _detect_memory_gb() -> float | None:
         if isinstance(page_size, int) and isinstance(physical_pages, int):
             return (page_size * physical_pages) / (1024**3)
 
-    if platform.system() == "Darwin":
-        try:
-            result = subprocess.run(
-                ["sysctl", "-n", "hw.memsize"],
-                check=True,
-                capture_output=True,
-                text=True,
-                timeout=5,
-            )
-        except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired):
-            return None
-        try:
-            return int(result.stdout.strip()) / (1024**3)
-        except ValueError:
-            return None
+    os_name = platform.system()
+    if os_name == "Darwin":
+        return _memory_from_command(["sysctl", "-n", "hw.memsize"])
+    if os_name == "Linux":
+        meminfo_memory = _memory_from_linux_meminfo()
+        if meminfo_memory is not None:
+            return meminfo_memory
+    if os_name == "Windows":
+        return _memory_from_command(
+            ["wmic", "computersystem", "get", "totalphysicalmemory", "/value"],
+            parse_value=lambda output: output.partition("=")[2].strip(),
+        )
 
     return None
+
+
+def _memory_from_linux_meminfo() -> float | None:
+    """Read Linux physical memory from /proc/meminfo when available."""
+
+    try:
+        for line in Path("/proc/meminfo").read_text(encoding="utf-8").splitlines():
+            if line.startswith("MemTotal:"):
+                parts = line.split()
+                return int(parts[1]) / (1024**2)
+    except (OSError, IndexError, ValueError):
+        return None
+    return None
+
+
+def _memory_from_command(
+    command: list[str], *, parse_value: Callable[[str], str] | None = None
+) -> float | None:
+    """Run an OS hardware command and parse byte output as GiB."""
+
+    try:
+        result = subprocess.run(
+            command,
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+    except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired):
+        return None
+
+    raw_value = result.stdout.strip()
+    if parse_value is not None:
+        raw_value = parse_value(raw_value)
+    try:
+        return int(raw_value) / (1024**3)
+    except ValueError:
+        return None
 
 
 def recommend_local_model(spec: LocalSystemSpec) -> LocalModelRecommendation:
@@ -132,10 +174,10 @@ def recommend_local_model(spec: LocalSystemSpec) -> LocalModelRecommendation:
 def ensure_first_run_local_model(
     *, force: bool = False, verbose: bool = True
 ) -> LocalSetupResult:
-    """Detect local specs, download the recommended Ollama model, and activate it.
+    """Detect specs, install/download the recommended model, and activate it.
 
-    The setup is intentionally conservative: explicit provider/model/API settings are
-    respected, and users can disable this step with ``RESEARCH_AGENTS_AUTO_LOCAL_SETUP=0``.
+    The setup is conservative: explicit provider/model/API settings are respected,
+    and users can disable this step with ``RESEARCH_AGENTS_AUTO_LOCAL_SETUP=0``.
     """
 
     spec = detect_system_spec()
@@ -168,57 +210,55 @@ def ensure_first_run_local_model(
             message="Existing hosted or explicit model configuration was preserved.",
         )
 
-    if not force and LOCAL_SETUP_SENTINEL.exists():
-        if not model_was_explicit:
-            _activate_local_environment(recommendation)
-        return LocalSetupResult(
-            spec,
-            recommendation,
-            attempted=False,
-            activated=True,
-            downloaded=False,
-            message="Local model setup was already completed.",
+    if not model_was_explicit:
+        _activate_local_environment(recommendation)
+
+    if verbose:
+        print(
+            "Detected "
+            f"{spec.os_name} {spec.machine}, {spec.cpu_count} CPUs, "
+            f"{spec.memory_label}. Selected {recommendation.model} "
+            f"({recommendation.preset}): {recommendation.reason}",
+            flush=True,
         )
 
-    if shutil.which("ollama") is None:
-        if should_activate_local and not model_was_explicit:
-            _activate_local_environment(recommendation)
+    if not _ensure_ollama_available(verbose=verbose):
         return LocalSetupResult(
             spec,
             recommendation,
-            attempted=False,
-            activated=should_activate_local,
+            attempted=True,
+            activated=True,
             downloaded=False,
             message=(
-                "Ollama is not installed. Install Ollama, then run "
-                f"`ollama pull {recommendation.model}`."
+                "Could not install or find Ollama automatically. Install Ollama, then run "
+                f"`ollama pull {recommendation.model}`; the app has activated the "
+                f"{recommendation.preset} preset for local mode."
             ),
         )
 
-    downloaded = _ollama_model_is_installed(recommendation.model)
-    if not downloaded:
-        if verbose:
-            print(
-                "Detected "
-                f"{spec.os_name} {spec.machine}, {spec.cpu_count} CPUs, "
-                f"{spec.memory_label}. Pulling local model "
-                f"{recommendation.model} ({recommendation.preset})...",
-                flush=True,
-            )
-        _pull_ollama_model(recommendation.model)
-        downloaded = True
-
-    if should_activate_local and not model_was_explicit:
-        _activate_local_environment(recommendation)
-
+    _ensure_ollama_server(verbose=verbose)
+    try:
+        downloaded = _download_recommended_model(recommendation, verbose=verbose)
+    except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
+        return LocalSetupResult(
+            spec,
+            recommendation,
+            attempted=True,
+            activated=True,
+            downloaded=False,
+            message=(
+                f"Failed to download {recommendation.model}: {exc}. "
+                f"Run `ollama pull {recommendation.model}` and restart the app."
+            ),
+        )
     _write_setup_sentinel(spec, recommendation)
     return LocalSetupResult(
         spec,
         recommendation,
         attempted=True,
-        activated=should_activate_local,
+        activated=True,
         downloaded=downloaded,
-        message=f"Local model ready: {recommendation.model} ({recommendation.preset}).",
+        message=f"Local model ready and active: {recommendation.model} ({recommendation.preset}).",
     )
 
 
@@ -230,6 +270,107 @@ def _activate_local_environment(recommendation: LocalModelRecommendation) -> Non
     os.environ.setdefault("RESEARCH_AGENTS_BASE_URL", DEFAULT_LOCAL_BASE_URL)
     os.environ.setdefault("RESEARCH_AGENTS_API_KEY", DEFAULT_LOCAL_API_KEY)
     os.environ.setdefault("RESEARCH_AGENTS_DISABLE_TRACING", "1")
+
+
+def _ensure_ollama_available(*, verbose: bool) -> bool:
+    """Return true when the ollama command exists, installing it if possible."""
+
+    if shutil.which("ollama") is not None:
+        return True
+    if _falsey(os.getenv(OLLAMA_INSTALL_ENV)):
+        return False
+
+    installer = _ollama_install_command()
+    if installer is None:
+        return False
+
+    if verbose:
+        print(
+            "Ollama was not found. Installing Ollama before downloading the model...",
+            flush=True,
+        )
+    try:
+        subprocess.run(
+            installer,
+            check=True,
+            timeout=int(
+                os.getenv(
+                    "RESEARCH_AGENTS_OLLAMA_INSTALL_TIMEOUT",
+                    DEFAULT_OLLAMA_INSTALL_TIMEOUT_SECONDS,
+                )
+            ),
+        )
+    except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired):
+        return False
+    return shutil.which("ollama") is not None
+
+
+def _ollama_install_command() -> list[str] | None:
+    """Return a non-interactive Ollama install command for the current system."""
+
+    os_name = platform.system()
+    if os_name == "Darwin" and shutil.which("brew") is not None:
+        return ["brew", "install", "ollama"]
+    if os_name == "Linux" and shutil.which("curl") is not None:
+        return ["sh", "-c", "curl -fsSL https://ollama.com/install.sh | sh"]
+    if os_name == "Windows" and shutil.which("winget") is not None:
+        return [
+            "winget",
+            "install",
+            "Ollama.Ollama",
+            "--silent",
+            "--accept-package-agreements",
+            "--accept-source-agreements",
+        ]
+    return None
+
+
+def _ensure_ollama_server(*, verbose: bool) -> None:
+    """Start Ollama in the background when the local API is not answering yet."""
+
+    if _ollama_api_is_running():
+        return
+    if verbose:
+        print("Starting the local Ollama server before model download...", flush=True)
+    try:
+        subprocess.Popen(
+            ["ollama", "serve"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True,
+        )
+    except OSError:
+        return
+    for _ in range(10):
+        time.sleep(0.5)
+        if _ollama_api_is_running():
+            return
+
+
+def _ollama_api_is_running() -> bool:
+    """Return whether the default Ollama API is reachable."""
+
+    try:
+        with urllib.request.urlopen(OLLAMA_HEALTH_URL, timeout=2):
+            return True
+    except (OSError, urllib.error.URLError):
+        return False
+
+
+def _download_recommended_model(
+    recommendation: LocalModelRecommendation, *, verbose: bool
+) -> bool:
+    """Pull the selected Ollama model if it is not already installed."""
+
+    if _ollama_model_is_installed(recommendation.model):
+        return False
+    if verbose:
+        print(
+            f"Downloading {recommendation.model} with `ollama pull` before startup...",
+            flush=True,
+        )
+    _pull_ollama_model(recommendation.model)
+    return True
 
 
 def _ollama_model_is_installed(model: str) -> bool:
@@ -247,9 +388,7 @@ def _ollama_model_is_installed(model: str) -> bool:
         return False
 
     installed_names = {
-        line.split()[0]
-        for line in result.stdout.splitlines()[1:]
-        if line.split()
+        line.split()[0] for line in result.stdout.splitlines()[1:] if line.split()
     }
     return model in installed_names
 
@@ -269,7 +408,7 @@ def _pull_ollama_model(model: str) -> None:
 def _write_setup_sentinel(
     spec: LocalSystemSpec, recommendation: LocalModelRecommendation
 ) -> None:
-    """Persist first-run setup metadata so later starts are fast."""
+    """Persist setup metadata for users to inspect."""
 
     LOCAL_SETUP_SENTINEL.parent.mkdir(parents=True, exist_ok=True)
     LOCAL_SETUP_SENTINEL.write_text(

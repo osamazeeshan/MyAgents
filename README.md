@@ -109,9 +109,9 @@ Authentication behavior:
 
 ### First-run local model setup
 
-On first launch, the CLI inspects the local operating system, CPU count, CPU architecture, and physical RAM. If you have not already configured hosted OpenAI credentials or an explicit provider/model, it selects the largest built-in Ollama preset that should fit the machine, pulls that model with `ollama pull`, and activates the local OpenAI-compatible Ollama endpoint for the current process. Install Ollama before first launch to let the project download the model automatically; if Ollama is missing, the app still selects and activates the recommended preset and prints the exact pull command to run.
+On first launch, before the CLI or web server starts running agents, the app inspects the local operating system, CPU count, CPU architecture, and physical RAM. If you have not already configured hosted OpenAI credentials or an explicit provider/model, it selects the largest built-in Ollama preset that should fit the machine, installs Ollama when a supported non-interactive installer is available, starts the local Ollama server if needed, pulls the selected model with `ollama pull`, and activates the local OpenAI-compatible Ollama endpoint for the current process. If hardware memory cannot be read, it deliberately falls back to the smallest `fast-small` preset, downloads it, and activates it.
 
-Use `--skip-local-setup` or set `RESEARCH_AGENTS_AUTO_LOCAL_SETUP=0` to bypass automatic detection/download. Existing `OPENAI_API_KEY`, `RESEARCH_AGENTS_PROVIDER`, or `RESEARCH_AGENTS_MODEL` settings are preserved.
+Use `--skip-local-setup` or set `RESEARCH_AGENTS_AUTO_LOCAL_SETUP=0` to bypass automatic detection/download. Set `RESEARCH_AGENTS_AUTO_INSTALL_OLLAMA=0` if you want the app to select/download models only when Ollama is already installed. Existing `OPENAI_API_KEY`, `RESEARCH_AGENTS_PROVIDER`, or `RESEARCH_AGENTS_MODEL` settings are preserved.
 
 ### Run against a local model on a Mac M2 with 16GB RAM
 
@@ -191,6 +191,8 @@ Useful environment variables:
 | `RESEARCH_AGENTS_USE_CHAT_COMPLETIONS` | unset | Force the Agents SDK to use the Chat Completions API shape for non-default endpoints. |
 | `RESEARCH_AGENTS_DISABLE_TRACING` | `1` in local mode | Disable hosted tracing export when running entirely locally. |
 | `RESEARCH_AGENTS_AUTO_LOCAL_SETUP` | enabled | Set to `0`, `false`, `no`, or `off` to skip first-run system detection, Ollama download, and local activation. |
+| `RESEARCH_AGENTS_AUTO_INSTALL_OLLAMA` | enabled | Set to `0`, `false`, `no`, or `off` to avoid installing Ollama automatically when the `ollama` command is missing. |
+| `RESEARCH_AGENTS_OLLAMA_INSTALL_TIMEOUT` | `600` | Seconds to wait for an automatic Ollama installation command before timing out. |
 | `RESEARCH_AGENTS_OLLAMA_PULL_TIMEOUT` | `1800` | Seconds to wait for the first-run `ollama pull` command before timing out. |
 | `RESEARCH_AGENTS_NOTES_DIR` | `research_notes` | Directory where the note-saving tool writes markdown files. |
 
