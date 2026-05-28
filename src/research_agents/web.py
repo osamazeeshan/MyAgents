@@ -28,6 +28,7 @@ from .config import (
     model_choices,
     selected_model,
 )
+from .local_setup import ensure_first_run_local_model
 
 APP_NAME = "ResearchAgent"
 APP_TAGLINE = "A glasshouse for research agents, paper scouts, and critical reviewers."
@@ -1824,11 +1825,20 @@ def create_server(
 
 
 def run_server(
-    host: str = DEFAULT_HOST, port: int = DEFAULT_PORT, *, open_browser: bool = False
+    host: str = DEFAULT_HOST,
+    port: int = DEFAULT_PORT,
+    *,
+    open_browser: bool = False,
+    skip_local_setup: bool = False,
 ) -> None:
     """Run the ResearchAgent web server until interrupted."""
 
     logging.basicConfig(level=logging.INFO, format="%(message)s")
+    if not skip_local_setup:
+        setup = ensure_first_run_local_model(verbose=True)
+        if setup.activated or setup.attempted:
+            print(setup.message)
+
     server = create_server(host, port)
     url = f"http://{host}:{server.server_port}"
     print(f"{APP_NAME} is ready at {url}")
@@ -1860,6 +1870,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--open", action="store_true", help="Open the web UI in your default browser."
     )
+    parser.add_argument(
+        "--skip-local-setup",
+        action="store_true",
+        help="Skip first-run local model detection and activation.",
+    )
     return parser.parse_args(argv)
 
 
@@ -1867,4 +1882,9 @@ def main(argv: list[str] | None = None) -> None:
     """Console entry point for the ResearchAgent web UI."""
 
     args = parse_args(argv)
-    run_server(args.host, args.port, open_browser=args.open)
+    run_server(
+        args.host,
+        args.port,
+        open_browser=args.open,
+        skip_local_setup=args.skip_local_setup,
+    )
